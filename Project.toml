@@ -1,0 +1,6 @@
+name = "L2OViz"
+uuid = "996a54a8-1679-4036-9533-689fb5a279e5"
+version = "0.1.0"
+
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
