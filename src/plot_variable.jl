@@ -1,29 +1,35 @@
 """
-    plot_variable(var_data::Matrix...; solver_names=nothing, x=nothing, xlabel=nothing,
+    plot_variable(x, var_data::Matrix...; solver_names=nothing, xlabel=nothing,
                   var_name="", vis_threshold::Int=20, significance_fn=default_significance) -> Figure
 
-Visualize each entry of a vector variable across multiple problem instances.
+Visualize a vector variable across multiple problem instances.
 
-Pass one or more `(n_entries × n_instances)` matrices, one per solver. Series are overlaid on
-each subplot with a shared legend. Solver names default to "Solver 1", "Solver 2", … when not
-provided via `solver_names`.
+`x` is either:
+- A single `Vector`: the same x is used for every solver's data matrix. Length must equal the
+number of instances in the data of each solver.
+- Multiple `Vector`s: one `Vector` per solver, in the same order as `var_data`. `length(x)`
+must equal the number of solvers, and length of each Vector must equal the number of instances in
+the data of each solver.
 
-Subplots are tiled into a roughly square grid. The x-axis defaults to instance indices with
-label `"Instance"`; if custom `x` values are provided the label defaults to `"Unknown Parameter"`
-unless `xlabel` is also given.
+`var_data` is one or more `(n_entries × n_instances)` matrices, one per solver.
+
+If not provided, solver names default to "Solver 1", "Solver 2", ...
+
+The x-axis label defaults to `"Unknown Parameter"` unless `xlabel` is given.
 
 Only the top-`vis_threshold` most significant entries are visualized. `significance_fn`
 (default: 1-norm) is applied to `vcat([d[k, :] for d in var_data]...)` to get the score of
 each entry. Entry labels always reflect the original indices.
 """
-function plot_variable(var_data::Matrix...; solver_names=nothing, x=nothing, xlabel=nothing,
+function plot_variable(x, var_data::Matrix...;
+                       solver_names=nothing, xlabel=nothing,
                        var_name="", vis_threshold::Int=20, significance_fn=default_significance)
     @assert length(var_data) >= 1 "At least one data matrix must be provided"
     n_solvers = length(var_data)
-    first_data = var_data[1]
-    n_entries, n_instances = size(first_data)
+    n_entries = size(var_data[1], 1)
+    # All matrices must have the same number of rows (dimension of the variable)
     for (i, d) in enumerate(var_data)
-        @assert size(d) == (n_entries, n_instances) "All data matrices must have size ($(n_entries), $(n_instances)); solver $(i) has size $(size(d))"
+        @assert size(d, 1) == n_entries "Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(n_entries)"
     end
     if isnothing(solver_names)
         solver_names = ["Solver $i" for i in 1:n_solvers]
@@ -31,13 +37,24 @@ function plot_variable(var_data::Matrix...; solver_names=nothing, x=nothing, xla
         @assert length(solver_names) == n_solvers "solver_names must have length $n_solvers"
     end
 
-    if isnothing(x)
-        x = collect(1:n_instances)
-        x_label = "Instance"
+    # Resolve x into a per-solver vector of x-axis values
+    if all(isa.(x, AbstractVector))
+        # x is multiple vectors, one per solver
+        x_vecs = collect(x)
+        @assert length(x_vecs) == n_solvers "Number of x vectors ($(length(x_vecs))) must equal number of data matrices ($n_solvers)"
+        for (i, xi) in enumerate(x_vecs)
+            n_instances_i = size(var_data[i], 2)
+            @assert length(xi) == n_instances_i "Length of x[$(i)] ($(length(xi))) must equal number of columns in data matrix $(i) ($n_instances_i)"
+        end
     else
-        @assert length(x) == n_instances "Length of x must equal number of instances ($n_instances)"
-        x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
+        # x is a single vector shared across all solvers
+        for (i, d) in enumerate(var_data)
+            n_instances_i = size(d, 2)
+            @assert length(x) == n_instances_i "Length of x ($(length(x))) must equal number of columns in data matrix $(i) ($n_instances_i)"
+        end
+        x_vecs = [x for _ in 1:n_solvers]
     end
+    x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
 
     # For each entry, combine values across all solvers and all instances for significance score
     scores = [significance_fn(vcat([d[k, :] for d in var_data]...)) for k in 1:n_entries]
@@ -61,7 +78,7 @@ function plot_variable(var_data::Matrix...; solver_names=nothing, x=nothing, xla
         ax = Axis(fig[grid_row, grid_col]; title=entry_label, xlabel=x_label, ylabel="Value")
 
         for (i, d) in enumerate(var_data)
-            p = scatter!(ax, x, d[data_idx, :]; color=solver_colors[i])
+            p = scatter!(ax, x_vecs[i], d[data_idx, :]; color=solver_colors[i])
             if k == 1
                 push!(legend_handles, p)
             end

@@ -1,15 +1,25 @@
 """
-    plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, var_data::Matrix...;
+    plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matrix...;
                          solver_names=nothing, m=nothing, n=nothing,
-                         x=nothing, xlabel=nothing, var_name="",
+                         xlabel=nothing, var_name="",
                          vis_threshold::Int=20, significance_fn=default_significance,
                          symmetric=false) -> Figure
 
-Visualize a matrix variable (given in COO format) across multiple problem instances.
+Visualize a matrix variable (given in COO format) across multiple problem instances. The matrix
+variable is assumed to have the same COO across all the problem instances.
 
-Pass `I`, `J` (COO indices), then one or more `(nnz × n_instances)` data matrices,
-one per solver. Series are overlaid on each subplot, identified with a shared legend.
-If not provided, solver names default to "Solver 1", "Solver 2", …
+`x` is either:
+- A single `Vector`: the same x is used for every solver's data matrix. Length must equal the
+number of instances in the data of each solver.
+- Multiple `Vector`s: one `Vector` per solver, in the same order as `var_data`. `length(x)`
+must equal the number of solvers, and length of each Vector must equal the number of instances in
+the data of each solver.
+
+`var_data` is one or more `(nnz × n_instances)` data matrices, one per solver.
+
+If not provided, solver names default to "Solver 1", "Solver 2", ...
+
+The x-axis label defaults to `"Unknown Parameter"` unless `xlabel` is given.
 
 **Symmetric mode** (`symmetric = true`): the COO coordinates should not contain repeated
 symmetry pairs. Entries are visualized for only the given half of the matrix specified
@@ -26,25 +36,44 @@ When `symmetric = true`, the top `vis_threshold` row-column pairs are selected.
 - `m`/`n` fix the number of rows/columns; otherwise `maximum(I)`/`maximum(J)` is used.
 - When `symmetric = true`, the grid is forced to be square.
 """
-function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, var_data::Matrix...;
+function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matrix...;
                                solver_names=nothing, m=nothing, n=nothing,
-                               x=nothing, xlabel=nothing, var_name="",
+                               xlabel=nothing, var_name="",
                                vis_threshold::Int=20, significance_fn=default_significance,
                                symmetric=false)
     @assert length(var_data) >= 1 "At least one data matrix must be provided"
     n_solvers = length(var_data)
-    first_data = var_data[1]
-    nnz, n_instances = size(first_data)
+    nnz = size(var_data[1], 1)
     @assert length(I) == nnz "Length of I must equal number of rows in var_data"
     @assert length(J) == nnz "Length of J must equal number of rows in var_data"
+    # All matrices must have the same number of rows (nnz of the variable)
     for (i, d) in enumerate(var_data)
-        @assert size(d) == (nnz, n_instances) "All data matrices must have size ($(nnz), $(n_instances)); solver $(i) has size $(size(d))"
+        @assert size(d, 1) == nnz "Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(nnz)"
     end
     if isnothing(solver_names)
         solver_names = ["Solver $i" for i in 1:n_solvers]
     else
         @assert length(solver_names) == n_solvers "solver_names must have length $n_solvers"
     end
+
+    # Resolve x into a per-solver vector of x-axis values
+    if all(isa.(x, AbstractVector))
+        # x is multiple vectors, one per solver
+        x_vecs = collect(x)
+        @assert length(x_vecs) == n_solvers "Number of x vectors ($(length(x_vecs))) must equal number of data matrices ($n_solvers)"
+        for (i, xi) in enumerate(x_vecs)
+            n_instances_i = size(var_data[i], 2)
+            @assert length(xi) == n_instances_i "Length of x[$(i)] ($(length(xi))) must equal number of columns in data matrix $(i) ($n_instances_i)"
+        end
+    else
+        # x is a single vector shared across all solvers
+        for (i, d) in enumerate(var_data)
+            n_instances_i = size(d, 2)
+            @assert length(x) == n_instances_i "Length of x ($(length(x))) must equal number of columns in data matrix $(i) ($n_instances_i)"
+        end
+        x_vecs = [x for _ in 1:n_solvers]
+    end
+    x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
 
     # Resolve full matrix dimensions
     if symmetric
@@ -66,14 +95,6 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, var_data::Matrix..
 
     @assert all(1 .<= I .<= effective_m_full) "All row indices must be in [1, m=$effective_m_full]"
     @assert all(1 .<= J .<= effective_n_full) "All column indices must be in [1, n=$effective_n_full]"
-
-    if isnothing(x)
-        x = collect(1:n_instances)
-        x_label = "Instance"
-    else
-        @assert length(x) == n_instances "Length of x must equal number of instances ($n_instances)"
-        x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
-    end
 
     # At each coordinate, combine values across all solvers and all instances for significance score
     entry_scores = [significance_fn(vcat([d[k, :] for d in var_data]...)) for k in 1:nnz]
@@ -107,7 +128,7 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, var_data::Matrix..
         ax = Axis(gl[gr, gc]; title=entry_label, xlabel=x_label, ylabel="Value")
 
         for (i, d) in enumerate(var_data)
-            p = scatter!(ax, x, d[nz_idx[k], :]; color=solver_colors[i])
+            p = scatter!(ax, x_vecs[i], d[nz_idx[k], :]; color=solver_colors[i])
             if k == 1
                 push!(legend_handles, p)
             end
