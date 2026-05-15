@@ -15,16 +15,11 @@ end
 
 """
     select_matrix_entries(entry_scores, I, J, vis_threshold, symmetric)
-        -> (I_plot, J_plot, data_row_indices, sel_rows, sel_cols, filtered::Bool)
+        -> (I_plot, J_plot, nz_idx, sel_rows, sel_cols, filtered::Bool)
 
 Determine which matrix entries to display, with optional thresholding.
 
-At most `vis_threshold` rows and at most `vis_threshold` columns are selected. For the
-non-symmetric case, rows and columns are scored and selected independently. For the
-symmetric case, row and column significance are the same, and row-column pairs are selected
-together. Returns early without computing scores when both the number of rows and the number
-of columns are within the threshold. `data_row_indices[k]` maps back into the original COO
-rows of var_data.
+At most `vis_threshold` rows and at most `vis_threshold` columns are selected. When `symmetric = false`, rows and columns are scored and selected independently. When `symmetric = true`, row and column significance are the same, and row-column pairs are selected together.
 """
 function select_matrix_entries(entry_scores::Vector{<:Real},
                                 I::Vector{Int}, J::Vector{Int},
@@ -52,8 +47,8 @@ function select_matrix_entries(entry_scores::Vector{<:Real},
         sorted_cols = sort(union(unique_rows, unique_cols), by=c -> col_scores[c], rev=true)
         sel_indices = sort(sorted_cols[1:min(vis_threshold, end)])
         sel_set = Set(sel_indices)
-        orig_idx = findall(k -> I[k] ∈ sel_set && J[k] ∈ sel_set, 1:length(I))
-        return I[orig_idx], J[orig_idx], orig_idx, sel_indices, sel_indices, true
+        nz_idx = findall(k -> I[k] ∈ sel_set && J[k] ∈ sel_set, 1:length(I))
+        return I[nz_idx], J[nz_idx], nz_idx, sel_indices, sel_indices, true
 
     else
         # Score rows and columns independently
@@ -69,7 +64,7 @@ function select_matrix_entries(entry_scores::Vector{<:Real},
         sel_cols = sort(sort(unique_cols, by=c -> col_scores[c], rev=true)[1:min(vis_threshold, end)])
         sel_row_set, sel_col_set = Set(sel_rows), Set(sel_cols)
 
-        orig_idx = findall(k -> I[k] ∈ sel_row_set && J[k] ∈ sel_col_set, 1:length(I))
-        return I[orig_idx], J[orig_idx], orig_idx, sel_rows, sel_cols, true
+        nz_idx = findall(k -> I[k] ∈ sel_row_set && J[k] ∈ sel_col_set, 1:length(I))
+        return I[nz_idx], J[nz_idx], nz_idx, sel_rows, sel_cols, true
     end
 end

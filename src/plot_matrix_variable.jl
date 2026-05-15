@@ -2,32 +2,34 @@
     plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, var_data::Matrix...;
                          solver_names=nothing, m=nothing, n=nothing,
                          x=nothing, xlabel=nothing, var_name="",
-                         vis_threshold::Int=30, significance_fn=default_significance,
+                         vis_threshold::Int=20, significance_fn=default_significance,
                          symmetric=false) -> Figure
 
 Visualize a matrix variable (given in COO format) across multiple problem instances.
 
 Pass `I`, `J` (COO indices), then one or more `(nnz × n_instances)` data matrices,
-one per solver. Series are overlaid on each subplot with a shared legend. Solver names
-default to "Solver 1", "Solver 2", …
+one per solver. Series are overlaid on each subplot, identified with a shared legend.
+If not provided, solver names default to "Solver 1", "Solver 2", …
 
-**Grid dimensions** (when not filtering):
+**Symmetric mode** (`symmetric = true`): the COO coordinates should not contain repeated
+symmetry pairs. Entries are visualized for only the given half of the matrix specified
+by the coordinates.
+
+**Thresholding**: if `length(unique(I)) > vis_threshold` or `length(unique(J)) > vis_threshold`,
+only the top-`vis_threshold` most significant rows *and* columns are visualized. `significance_fn`
+(default: 1-norm) is applied to `vcat([d[k, :] for d in var_data]...)` to get the score of
+coordinate (I[k], J[k]). Score of each row/column is the max entry score in that row/column.
+
+When `symmetric = true`, the top `vis_threshold` row-column pairs are selected.
+
+**Grid dimensions**:
 - `m`/`n` fix the number of rows/columns; otherwise `maximum(I)`/`maximum(J)` is used.
-- When `symmetric = true`, the grid is forced square; only one of `m`/`n` is needed.
-
-**Thresholding**: when `unique(I) > vis_threshold` or `unique(J) > vis_threshold`, only
-the top-`vis_threshold` most significant rows *and* columns are shown in a compressed
-grid. Row/column score is the max entry score in that row/column; scores come from
-`significance_fn` (default: 1-norm) applied to values concatenated across all solvers.
-For `symmetric = true`, the top `vis_threshold` row-column pairs are selected.
-
-**Symmetric mode** (`symmetric = true`): the grid is forced square and only column significance
-is used for index selection. The COO may store only one triangle; entries are shown as-is.
+- When `symmetric = true`, the grid is forced to be square.
 """
 function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, var_data::Matrix...;
                                solver_names=nothing, m=nothing, n=nothing,
                                x=nothing, xlabel=nothing, var_name="",
-                               vis_threshold::Int=30, significance_fn=default_significance,
+                               vis_threshold::Int=20, significance_fn=default_significance,
                                symmetric=false)
     @assert length(var_data) >= 1 "At least one data matrix must be provided"
     n_solvers = length(var_data)
@@ -73,9 +75,9 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, var_data::Matrix..
         x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
     end
 
-    # Combine scores across all solvers for entry significance
+    # At each coordinate, combine values across all solvers and all instances for significance score
     entry_scores = [significance_fn(vcat([d[k, :] for d in var_data]...)) for k in 1:nnz]
-    I_plot, J_plot, data_row_idx, sel_rows, sel_cols, filtered =
+    I_plot, J_plot, nz_idx, sel_rows, sel_cols, filtered =
         select_matrix_entries(entry_scores, I, J, vis_threshold, symmetric)
 
     n_plot = length(I_plot)
@@ -105,7 +107,7 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, var_data::Matrix..
         ax = Axis(gl[gr, gc]; title=entry_label, xlabel=x_label, ylabel="Value")
 
         for (i, d) in enumerate(var_data)
-            p = scatter!(ax, x, d[data_row_idx[k], :]; color=solver_colors[i])
+            p = scatter!(ax, x, d[nz_idx[k], :]; color=solver_colors[i])
             if k == 1
                 push!(legend_handles, p)
             end

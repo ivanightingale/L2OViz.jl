@@ -1,6 +1,6 @@
 """
     plot_variable(var_data::Matrix...; solver_names=nothing, x=nothing, xlabel=nothing,
-                  var_name="", vis_threshold::Int=30, significance_fn=default_significance) -> Figure
+                  var_name="", vis_threshold::Int=20, significance_fn=default_significance) -> Figure
 
 Visualize each entry of a vector variable across multiple problem instances.
 
@@ -12,11 +12,12 @@ Subplots are tiled into a roughly square grid. The x-axis defaults to instance i
 label `"Instance"`; if custom `x` values are provided the label defaults to `"Unknown Parameter"`
 unless `xlabel` is also given.
 
-Only the `vis_threshold` highest-scoring entries (via `significance_fn`) are shown; default
-is 30. Entry labels always reflect the original indices.
+Only the top-`vis_threshold` most significant entries are visualized. `significance_fn`
+(default: 1-norm) is applied to `vcat([d[k, :] for d in var_data]...)` to get the score of
+each entry. Entry labels always reflect the original indices.
 """
 function plot_variable(var_data::Matrix...; solver_names=nothing, x=nothing, xlabel=nothing,
-                       var_name="", vis_threshold::Int=30, significance_fn=default_significance)
+                       var_name="", vis_threshold::Int=20, significance_fn=default_significance)
     @assert length(var_data) >= 1 "At least one data matrix must be provided"
     n_solvers = length(var_data)
     first_data = var_data[1]
@@ -38,7 +39,7 @@ function plot_variable(var_data::Matrix...; solver_names=nothing, x=nothing, xla
         x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
     end
 
-    # Compute significance scores (combined across all solvers) and select entries
+    # For each entry, combine values across all solvers and all instances for significance score
     scores = [significance_fn(vcat([d[k, :] for d in var_data]...)) for k in 1:n_entries]
     selected_indices, _ = select_variable_entries(scores, vis_threshold)
 
@@ -53,15 +54,15 @@ function plot_variable(var_data::Matrix...; solver_names=nothing, x=nothing, xla
 
     legend_handles = []
 
-    for (plot_k, orig_k) in enumerate(selected_indices)
-        grid_row = div(plot_k - 1, n_cols) + 1
-        grid_col = mod(plot_k - 1, n_cols) + 1
-        entry_label = isempty(var_name) ? "[$orig_k]" : "$(var_name)[$orig_k]"
+    for (k, data_idx) in enumerate(selected_indices)
+        grid_row = div(k - 1, n_cols) + 1
+        grid_col = mod(k - 1, n_cols) + 1
+        entry_label = isempty(var_name) ? "[$data_idx]" : "$(var_name)[$data_idx]"
         ax = Axis(fig[grid_row, grid_col]; title=entry_label, xlabel=x_label, ylabel="Value")
 
         for (i, d) in enumerate(var_data)
-            p = scatter!(ax, x, d[orig_k, :]; color=solver_colors[i])
-            if plot_k == 1
+            p = scatter!(ax, x, d[data_idx, :]; color=solver_colors[i])
+            if k == 1
                 push!(legend_handles, p)
             end
         end
