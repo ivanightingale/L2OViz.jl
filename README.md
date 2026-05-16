@@ -1,7 +1,7 @@
 # L2OViz.jl
 L2OViz.jl visualizes the solutions to multiple instances of an optimization problem.
 It supports visualizing the solutions of the same instances from multiple solvers for comparison.
-It also has a special feature for visualizing (the most interesting rows and columns of) matrix variables in a 2D layout of subplots which correspond to coordinates in the matrix.
+It also has a special feature for visualizing (the most interesting rows and columns of) symmetric matrix variables in a 2D layout of subplots which correspond to coordinates in the matrix.
 This can be useful when the variables correspond to a graph for example.
 
 
@@ -18,11 +18,13 @@ contains the values of a 5-dimensional variable for 3 instances of an optimizati
 
 `plot_variable` accepts a variable number of `Matrix` inputs, each corresponding to a solver.
 
-### Matrix variables
-Matrix variable data should be provided in COO format.
+### Symmetric matrix variables
+Symmetric matrix variable data should be provided in COO format.
 It is assumed that, across all the problem instances, the same matrix variable has the same dimensions and sparsity structure.
-Therefore, the values are still stored as a `Matrix` with `n_instances` columns, and each column contains the nonzero values of the matrix variable in each problem instance.
+The values are still stored as a `Matrix` with `n_instances` columns, where each column contains the nonzero values of the matrix variable in each problem instance.
 In other words, all the variables are treated as vector variables in L2OViz.jl.
+
+Additionally, it is assumed that the COO coordinates contain only one of each symmetry pair (i.e. a half representation; entries are visualized only at the given coordinates).
 
 `plot_matrix_variable` accepts a variable number of `Matrix` inputs, each corresponding to a solver.
 
@@ -53,8 +55,7 @@ using system topology from PGLib.jl and PowerModels.jl.
   argument is a `Dict` mapping variable names to matrices, one per solver.
 
 By default (`flat=false`), the plot type is inferred from each variable's dimension:
-- Equal to the number of **branches** → `plot_matrix_variable`, with COO indices from `f_bus`/`t_bus`
-  in sorted branch key order.
+- Equal to the number of **branches** → `plot_matrix_variable`, with COO indices from `f_bus`/`t_bus` in sorted branch key order.
 - Equal to the number of **buses** → `plot_variable`.
 
 When `flat=true`, all variables use `plot_variable` and the network is not loaded.

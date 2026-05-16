@@ -38,64 +38,49 @@ end  # select_variable_entries
 
 @testset "select_matrix_entries" begin
 
-    @testset "non-symmetric: no filtering when both dims within threshold" begin
-        # 2 unique rows, 2 unique cols, vis_threshold=3 → no filtering
-        I = [1, 1, 2]
-        J = [1, 2, 2]
-        scores = [5.0, 3.0, 1.0]
-        I_plot, J_plot, nz_idx, sel_rows, sel_cols, filtered =
-            select_matrix_entries(scores, I, J, 3, false)
-        @test filtered == false
-        @test nz_idx == [1, 2, 3]
-        @test sel_rows == [1, 2]
-        @test sel_cols == [1, 2]
-    end
-
-    @testset "non-symmetric: rows and cols scored independently" begin
-        # 3x3 layout, vis_threshold=2
-        # Rows: 1→max(1,2)=2, 2→5, 3→3  → top 2: rows [2,3]
-        # Cols: 1→1, 2→2, 3→max(5,3)=5  → top 2: cols [2,3]
-        I = [1, 1, 2, 3]
-        J = [1, 2, 3, 3]
-        scores = [1.0, 2.0, 5.0, 3.0]
-        I_plot, J_plot, orig_idx, sel_rows, sel_cols, filtered =
-            select_matrix_entries(scores, I, J, 2, false)
-        @test filtered == true
-        @test sel_rows == [2, 3]
-        @test sel_cols == [2, 3]
-        # Only entry (2,3) and (3,3) survive the row/col filter
-        @test orig_idx == [3, 4]
-        @test I_plot == [2, 3]
-        @test J_plot == [3, 3]
-    end
-
-    @testset "symmetric: no filtering when both dims within threshold" begin
-        # 1 unique row, 2 unique cols → both ≤ vis_threshold=3
+    @testset "no filtering when the number of unique indices is within threshold" begin
+        # union(unique(I), unique(J)) = {1, 2, 3} of size 3 ≤ vis_threshold = 3
         I = [1, 1]
         J = [2, 3]
         scores = [5.0, 3.0]
-        I_plot, J_plot, nz_idx, sel_rows, sel_cols, filtered =
-            select_matrix_entries(scores, I, J, 3, true)
+        I_plot, J_plot, nz_idx, sel_indices, filtered =
+            select_matrix_entries(scores, I, J, 3)
         @test filtered == false
         @test nz_idx == [1, 2]
         @test I_plot == I
         @test J_plot == J
+        @test sel_indices == [1, 2, 3]
     end
 
-    @testset "symmetric: select an index in I that is not in J" begin
-        # Entry (1,4) has the highest score → both 1 and 4 should be selected with vis_threshold=2.
+    @testset "filtering applies when the union of unique indices exceeds the threshold" begin
+        # union(unique(I), unique(J)) = {1, 2, 3} of size 3 > vis_threshold = 2,
+        # even though unique(I) and unique(J) are individually within the threshold.
+        I = [1, 1]
+        J = [2, 3]
+        scores = [1.0, 5.0]
+        I_plot, J_plot, nz_idx, sel_indices, filtered =
+            select_matrix_entries(scores, I, J, 2)
+        @test filtered == true
+        # Entry (1, 3) has the highest score → indices 1 and 3 are selected.
+        @test sel_indices == [1, 3]
+        @test nz_idx == [2]
+        @test I_plot == [1]
+        @test J_plot == [3]
+    end
+
+    @testset "selected indices may include indices appearing only in I" begin
+        # Entry (1, 4) has the highest score → both 1 and 4 should be selected with vis_threshold = 2.
         I = [1, 2, 3]
         J = [4, 4, 4]
         scores = [10.0, 5.0, 3.0]
-        I_plot, J_plot, nz_idx, sel_rows, sel_cols, filtered =
-            select_matrix_entries(scores, I, J, 2, true)
+        I_plot, J_plot, nz_idx, sel_indices, filtered =
+            select_matrix_entries(scores, I, J, 2)
         @test filtered == true
         # Index 1 gets score 10 (via the T' column: col_scores[I[1]] = max(..., 10))
         # Index 4 gets score 10 (via col_scores[J[1]] = 10)
         # They tie for first, so both are selected.
-        @test sel_rows == [1, 4]
-        @test sel_cols == [1, 4]
-        # Only entry k=1 has both I[k]=1 ∈ {1,4} and J[k]=4 ∈ {1,4}
+        @test sel_indices == [1, 4]
+        # Only entry k = 1 has both I[k] = 1 ∈ {1, 4} and J[k] = 4 ∈ {1, 4}
         @test nz_idx == [1]
         @test I_plot == [1]
         @test J_plot == [4]

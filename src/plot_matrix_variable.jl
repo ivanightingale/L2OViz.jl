@@ -1,12 +1,13 @@
 """
     plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matrix...;
-                         solver_names=nothing, m=nothing, n=nothing,
+                         solver_names=nothing, n=nothing,
                          xlabel=nothing, var_name="",
-                         vis_threshold::Int=20, significance_fn=default_significance,
-                         symmetric=false) -> Figure
+                         vis_threshold::Int=20, significance_fn=default_significance) -> Figure
 
-Visualize a matrix variable (given in COO format) across multiple problem instances. The matrix
-variable is assumed to have the same COO across all the problem instances.
+Visualize a symmetric matrix variable (given in COO format) across multiple problem instances.
+The matrix variable is assumed to have the same COO across all the problem instances, and to be
+symmetric: the COO coordinates should not contain repeated symmetry pairs, and entries are
+visualized for only the given half of the matrix specified by the coordinates.
 
 `x` is either:
 - A single `Vector`: the same x is used for every solver's data matrix. Length must equal the
@@ -21,26 +22,19 @@ If not provided, solver names default to "Solver 1", "Solver 2", ...
 
 The x-axis label defaults to `"Unknown Parameter"` unless `xlabel` is given.
 
-**Symmetric mode** (`symmetric = true`): the COO coordinates should not contain repeated
-symmetry pairs. Entries are visualized for only the given half of the matrix specified
-by the coordinates.
+**Thresholding**: if number of unique rows/columns exceeds `vis_threshold`, select an induced
+submatrix with dimension `vis_threshold`. `significance_fn` (default: 1-norm) is applied
+to the values of the k-th entry of the variable across all solvers and instances to get the
+score of coordinate `(I[k], J[k])`, and the score of each column/row is the max entry score in
+that column/row.
 
-**Thresholding**: if `length(unique(I)) > vis_threshold` or `length(unique(J)) > vis_threshold`,
-only the top-`vis_threshold` most significant rows *and* columns are visualized. `significance_fn`
-(default: 1-norm) is applied to `vcat([d[k, :] for d in var_data]...)` to get the score of
-coordinate (I[k], J[k]). Score of each row/column is the max entry score in that row/column.
-
-When `symmetric = true`, the top `vis_threshold` row-column pairs are selected.
-
-**Grid dimensions**:
-- `m`/`n` fix the number of rows/columns; otherwise `maximum(I)`/`maximum(J)` is used.
-- When `symmetric = true`, the grid is forced to be square.
+**Grid dimensions**: `n` fixes the side length of the (square) matrix; otherwise
+`max(maximum(I), maximum(J))` is used.
 """
 function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matrix...;
-                               solver_names=nothing, m=nothing, n=nothing,
+                               solver_names=nothing, n=nothing,
                                xlabel=nothing, var_name="",
-                               vis_threshold::Int=20, significance_fn=default_significance,
-                               symmetric=false)
+                               vis_threshold::Int=20, significance_fn=default_significance)
     length(var_data) >= 1 || throw(ArgumentError("At least one data matrix must be provided"))
     n_solvers = length(var_data)
     nnz = size(var_data[1], 1)
@@ -75,42 +69,26 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matri
     end
     x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
 
-    # Resolve full matrix dimensions
-    if symmetric
-        if !isnothing(m) && !isnothing(n)
-            m == n || throw(ArgumentError("Symmetric matrix must be square (m=$m, n=$n)"))
-            effective_m_full = m; effective_n_full = n
-        elseif !isnothing(m)
-            effective_m_full = m; effective_n_full = m
-        elseif !isnothing(n)
-            effective_m_full = n; effective_n_full = n
-        else
-            d = max(maximum(I), maximum(J))
-            effective_m_full = d; effective_n_full = d
-        end
-    else
-        effective_m_full = isnothing(m) ? maximum(I) : m
-        effective_n_full = isnothing(n) ? maximum(J) : n
-    end
+    # Resolve full matrix dimension; symmetric matrix is square
+    effective_n_full = isnothing(n) ? max(maximum(I), maximum(J)) : n
 
-    all(1 .<= I .<= effective_m_full) || throw(ArgumentError("All row indices must be in [1, m=$effective_m_full]"))
+    all(1 .<= I .<= effective_n_full) || throw(ArgumentError("All row indices must be in [1, n=$effective_n_full]"))
     all(1 .<= J .<= effective_n_full) || throw(ArgumentError("All column indices must be in [1, n=$effective_n_full]"))
 
     # At each coordinate, combine values across all solvers and all instances for significance score
     entry_scores = [significance_fn(vcat([d[k, :] for d in var_data]...)) for k in 1:nnz]
-    I_plot, J_plot, nz_idx, sel_rows, sel_cols, filtered =
-        select_matrix_entries(entry_scores, I, J, vis_threshold, symmetric)
+    I_plot, J_plot, nz_idx, sel_indices, filtered =
+        select_matrix_entries(entry_scores, I, J, vis_threshold)
 
     n_plot = length(I_plot)
 
-    # Compressed grid when filtering; full m×n grid otherwise
+    # Compressed grid when filtering; full n×n grid otherwise
     if filtered
-        row_map = Dict(r => idx for (idx, r) in enumerate(sel_rows))
-        col_map = Dict(c => idx for (idx, c) in enumerate(sel_cols))
-        n_grid_rows, n_grid_cols = length(sel_rows), length(sel_cols)
-        grid_pos = (i, j) -> (row_map[i], col_map[j])
+        index_map = Dict(c => idx for (idx, c) in enumerate(sel_indices))
+        n_grid_rows = n_grid_cols = length(sel_indices)
+        grid_pos = (i, j) -> (index_map[i], index_map[j])
     else
-        n_grid_rows, n_grid_cols = effective_m_full, effective_n_full
+        n_grid_rows, n_grid_cols = effective_n_full, effective_n_full
         grid_pos = (i, j) -> (i, j)
     end
 

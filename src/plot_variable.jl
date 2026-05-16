@@ -18,8 +18,8 @@ If not provided, solver names default to "Solver 1", "Solver 2", ...
 The x-axis label defaults to `"Unknown Parameter"` unless `xlabel` is given.
 
 Only the top-`vis_threshold` most significant entries are visualized. `significance_fn`
-(default: 1-norm) is applied to `vcat([d[k, :] for d in var_data]...)` to get the score of
-each entry. Entry labels always reflect the original indices.
+(default: 1-norm) is applied to the values of each entry of the variable across all solvers and
+instances to get the score of each entry. Entry labels always reflect the original indices.
 """
 function plot_variable(x, var_data::Matrix...;
                        solver_names=nothing, xlabel=nothing,
