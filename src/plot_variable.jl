@@ -24,33 +24,33 @@ each entry. Entry labels always reflect the original indices.
 function plot_variable(x, var_data::Matrix...;
                        solver_names=nothing, xlabel=nothing,
                        var_name="", vis_threshold::Int=20, significance_fn=default_significance)
-    @assert length(var_data) >= 1 "At least one data matrix must be provided"
+    length(var_data) >= 1 || throw(ArgumentError("At least one data matrix must be provided"))
     n_solvers = length(var_data)
     n_entries = size(var_data[1], 1)
     # All matrices must have the same number of rows (dimension of the variable)
     for (i, d) in enumerate(var_data)
-        @assert size(d, 1) == n_entries "Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(n_entries)"
+        size(d, 1) == n_entries || throw(DimensionMismatch("Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(n_entries)"))
     end
     if isnothing(solver_names)
         solver_names = ["Solver $i" for i in 1:n_solvers]
     else
-        @assert length(solver_names) == n_solvers "solver_names must have length $n_solvers"
+        length(solver_names) == n_solvers || throw(ArgumentError("solver_names must have length $n_solvers"))
     end
 
     # Resolve x into a per-solver vector of x-axis values
     if all(isa.(x, AbstractVector))
         # x is multiple vectors, one per solver
         x_vecs = collect(x)
-        @assert length(x_vecs) == n_solvers "Number of x vectors ($(length(x_vecs))) must equal number of data matrices ($n_solvers)"
+        length(x_vecs) == n_solvers || throw(ArgumentError("Number of x vectors ($(length(x_vecs))) must equal number of data matrices ($n_solvers)"))
         for (i, xi) in enumerate(x_vecs)
             n_instances_i = size(var_data[i], 2)
-            @assert length(xi) == n_instances_i "Length of x[$(i)] ($(length(xi))) must equal number of columns in data matrix $(i) ($n_instances_i)"
+            length(xi) == n_instances_i || throw(DimensionMismatch("Length of x[$(i)] ($(length(xi))) must equal number of columns in data matrix $(i) ($n_instances_i)"))
         end
     else
         # x is a single vector shared across all solvers
         for (i, d) in enumerate(var_data)
             n_instances_i = size(d, 2)
-            @assert length(x) == n_instances_i "Length of x ($(length(x))) must equal number of columns in data matrix $(i) ($n_instances_i)"
+            length(x) == n_instances_i || throw(DimensionMismatch("Length of x ($(length(x))) must equal number of columns in data matrix $(i) ($n_instances_i)"))
         end
         x_vecs = [x for _ in 1:n_solvers]
     end
@@ -70,12 +70,14 @@ function plot_variable(x, var_data::Matrix...;
     fig = Figure(size=(320 * n_cols, 260 * n_rows + 60))
 
     legend_handles = []
+    axes = Axis[]
 
     for (k, data_idx) in enumerate(selected_indices)
         grid_row = div(k - 1, n_cols) + 1
         grid_col = mod(k - 1, n_cols) + 1
         entry_label = isempty(var_name) ? "[$data_idx]" : "$(var_name)[$data_idx]"
-        ax = Axis(fig[grid_row, grid_col]; title=entry_label, xlabel=x_label, ylabel="Value")
+        ax = Axis(fig[grid_row, grid_col]; title=entry_label, xlabel=x_label)
+        push!(axes, ax)
 
         for (i, d) in enumerate(var_data)
             p = scatter!(ax, x_vecs[i], d[data_idx, :]; color=solver_colors[i])
@@ -84,6 +86,9 @@ function plot_variable(x, var_data::Matrix...;
             end
         end
     end
+
+    linkxaxes!(axes...)
+    linkyaxes!(axes...)
 
     Legend(fig[n_rows + 1, 1:n_cols], legend_handles, solver_names;
            orientation=:horizontal, tellwidth=false)

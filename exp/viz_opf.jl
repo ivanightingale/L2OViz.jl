@@ -57,15 +57,17 @@ function viz_opf(
 
     if T <: Matrix
         # var_data are Matrix only if variables is a String.
-        @assert variables isa String "`variables` should be a String when visualizing a single variable (var_data are Matrix)"
+        variables isa String || throw(ArgumentError("`variables` should be a String when visualizing a single variable (var_data are Matrix)"))
         # Single variable: var_data are the per-solver matrices directly.
         var_data_pairs = [(variables, collect(var_data))]
     else
         # Multiple variables: extract each variable's matrices from the per-solver Dicts.
         # Check that all solvers have all variables.
-        @assert variables isa Vector{String} "`variables` should be a Vector{String} when visualizing multiple variables (var_data are Dict)"
+        variables isa Vector{String} || throw(ArgumentError("`variables` should be a Vector{String} when visualizing multiple variables (var_data are Dict)"))
         for (i, d) in enumerate(var_data)
-            @assert all(haskey(d, v) for v in variables) "Variable '$v' not found in data for solver $(i)"
+            for v in variables
+                haskey(d, v) || throw(ArgumentError("Variable '$v' not found in data for solver $(i)"))
+            end
         end
         var_data_pairs = [(v, [d[v] for d in var_data]) for v in variables]
     end
@@ -85,7 +87,7 @@ function viz_opf(
                                        var_name=var_name,
                                        vis_threshold=vis_threshold)
         else
-            @assert n_dim == n_buses "Variable '$var_name' has dimension $n_dim, expected $n_branches (branches) or $n_buses (buses)"
+            n_dim == n_buses || throw(ArgumentError("Variable '$var_name' has dimension $n_dim, expected $n_branches (branches) or $n_buses (buses)"))
             fig = plot_variable(x, solvers_data...;
                                 solver_names=solver_names,
                                 var_name=var_name,

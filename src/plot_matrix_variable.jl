@@ -41,35 +41,35 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matri
                                xlabel=nothing, var_name="",
                                vis_threshold::Int=20, significance_fn=default_significance,
                                symmetric=false)
-    @assert length(var_data) >= 1 "At least one data matrix must be provided"
+    length(var_data) >= 1 || throw(ArgumentError("At least one data matrix must be provided"))
     n_solvers = length(var_data)
     nnz = size(var_data[1], 1)
-    @assert length(I) == nnz "Length of I must equal number of rows in var_data"
-    @assert length(J) == nnz "Length of J must equal number of rows in var_data"
+    length(I) == nnz || throw(DimensionMismatch("Length of I must equal number of rows in var_data"))
+    length(J) == nnz || throw(DimensionMismatch("Length of J must equal number of rows in var_data"))
     # All matrices must have the same number of rows (nnz of the variable)
     for (i, d) in enumerate(var_data)
-        @assert size(d, 1) == nnz "Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(nnz)"
+        size(d, 1) == nnz || throw(DimensionMismatch("Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(nnz)"))
     end
     if isnothing(solver_names)
         solver_names = ["Solver $i" for i in 1:n_solvers]
     else
-        @assert length(solver_names) == n_solvers "solver_names must have length $n_solvers"
+        length(solver_names) == n_solvers || throw(ArgumentError("solver_names must have length $n_solvers"))
     end
 
     # Resolve x into a per-solver vector of x-axis values
     if all(isa.(x, AbstractVector))
         # x is multiple vectors, one per solver
         x_vecs = collect(x)
-        @assert length(x_vecs) == n_solvers "Number of x vectors ($(length(x_vecs))) must equal number of data matrices ($n_solvers)"
+        length(x_vecs) == n_solvers || throw(ArgumentError("Number of x vectors ($(length(x_vecs))) must equal number of data matrices ($n_solvers)"))
         for (i, xi) in enumerate(x_vecs)
             n_instances_i = size(var_data[i], 2)
-            @assert length(xi) == n_instances_i "Length of x[$(i)] ($(length(xi))) must equal number of columns in data matrix $(i) ($n_instances_i)"
+            length(xi) == n_instances_i || throw(DimensionMismatch("Length of x[$(i)] ($(length(xi))) must equal number of columns in data matrix $(i) ($n_instances_i)"))
         end
     else
         # x is a single vector shared across all solvers
         for (i, d) in enumerate(var_data)
             n_instances_i = size(d, 2)
-            @assert length(x) == n_instances_i "Length of x ($(length(x))) must equal number of columns in data matrix $(i) ($n_instances_i)"
+            length(x) == n_instances_i || throw(DimensionMismatch("Length of x ($(length(x))) must equal number of columns in data matrix $(i) ($n_instances_i)"))
         end
         x_vecs = [x for _ in 1:n_solvers]
     end
@@ -78,7 +78,7 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matri
     # Resolve full matrix dimensions
     if symmetric
         if !isnothing(m) && !isnothing(n)
-            @assert m == n "Symmetric matrix must be square (m=$m, n=$n)"
+            m == n || throw(ArgumentError("Symmetric matrix must be square (m=$m, n=$n)"))
             effective_m_full = m; effective_n_full = n
         elseif !isnothing(m)
             effective_m_full = m; effective_n_full = m
@@ -93,8 +93,8 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matri
         effective_n_full = isnothing(n) ? maximum(J) : n
     end
 
-    @assert all(1 .<= I .<= effective_m_full) "All row indices must be in [1, m=$effective_m_full]"
-    @assert all(1 .<= J .<= effective_n_full) "All column indices must be in [1, n=$effective_n_full]"
+    all(1 .<= I .<= effective_m_full) || throw(ArgumentError("All row indices must be in [1, m=$effective_m_full]"))
+    all(1 .<= J .<= effective_n_full) || throw(ArgumentError("All column indices must be in [1, n=$effective_n_full]"))
 
     # At each coordinate, combine values across all solvers and all instances for significance score
     entry_scores = [significance_fn(vcat([d[k, :] for d in var_data]...)) for k in 1:nnz]
@@ -121,11 +121,13 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matri
     gl = fig[1, 1] = GridLayout(n_grid_rows, n_grid_cols)
 
     legend_handles = []
+    axes = Axis[]
 
     for k in 1:n_plot
         entry_label = isempty(var_name) ? "[$(I_plot[k]),$(J_plot[k])]" : "$(var_name)[$(I_plot[k]),$(J_plot[k])]"
         gr, gc = grid_pos(I_plot[k], J_plot[k])
-        ax = Axis(gl[gr, gc]; title=entry_label, xlabel=x_label, ylabel="Value")
+        ax = Axis(gl[gr, gc]; title=entry_label, xlabel=x_label)
+        push!(axes, ax)
 
         for (i, d) in enumerate(var_data)
             p = scatter!(ax, x_vecs[i], d[nz_idx[k], :]; color=solver_colors[i])
@@ -134,6 +136,9 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matri
             end
         end
     end
+
+    linkxaxes!(axes...)
+    linkyaxes!(axes...)
 
     Legend(fig[2, 1], legend_handles, solver_names;
            orientation=:horizontal, tellwidth=false)

@@ -8,7 +8,7 @@ Return the indices of the `vis_threshold` highest-scoring entries, sorted ascend
 If `length(scores) ≤ vis_threshold`, returns all indices and `filtered = false`.
 """
 function select_variable_entries(scores::Vector{<:Real}, vis_threshold::Int)
-    @assert vis_threshold > 0 "vis_threshold must be positive"
+    vis_threshold > 0 || throw(ArgumentError("vis_threshold must be positive"))
     length(scores) <= vis_threshold && return collect(1:length(scores)), false
     return sort(partialsortperm(scores, 1:vis_threshold, rev=true)), true
 end
@@ -25,7 +25,7 @@ function select_matrix_entries(entry_scores::Vector{<:Real},
                                 I::Vector{Int}, J::Vector{Int},
                                 vis_threshold::Int,
                                 symmetric::Bool)
-    @assert vis_threshold > 0 "vis_threshold must be positive"
+    vis_threshold > 0 || throw(ArgumentError("vis_threshold must be positive"))
 
     unique_rows = sort(unique(I))
     unique_cols = sort(unique(J))
