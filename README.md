@@ -39,3 +39,24 @@ In this case, different `x` should be provided.
 ### Thresholding
 When the dimension of the variable to visualize is too high, `vis_threshold` limits the number of entries that are visualized.
 `significance_fn` is used to select the most interesting entries of the variable.
+
+
+## Example: Optimal Power Flow
+`exp/viz_opf.jl` defines `viz_opf`, a utility function for visualizing OPF solution data
+using system topology from PGLib.jl and PowerModels.jl.
+
+`viz_opf` supports two calling modes:
+
+- **Single variable** (`variables::String`, `var_data::Matrix...`): each `var_data` argument is
+  one solver's `(n_dim × n_instances)` matrix for the named variable.
+- **Multiple variables** (`variables::Vector{String}`, `var_data::Dict...`): each `var_data`
+  argument is a `Dict` mapping variable names to matrices, one per solver.
+
+By default (`flat=false`), the plot type is inferred from each variable's dimension:
+- Equal to the number of **branches** → `plot_matrix_variable`, with COO indices from `f_bus`/`t_bus`
+  in sorted branch key order.
+- Equal to the number of **buses** → `plot_variable`.
+
+When `flat=true`, all variables use `plot_variable` and the network is not loaded.
+Output images are named `{system_name}_{variable}.png`.
+
