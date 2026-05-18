@@ -55,9 +55,13 @@ using system topology from PGLib.jl and PowerModels.jl.
   argument is a `Dict` mapping variable names to matrices, one per solver.
 
 By default (`flat=false`), the plot type is inferred from each variable's dimension:
-- Equal to the number of **branches** → `plot_matrix_variable`, with COO indices from `f_bus`/`t_bus` in sorted branch key order.
+- Equal to the number of **branches** → `plot_matrix_variable`, with COO indices from `f_bus`/`t_bus` in sorted branch key order obtained from `make_basic_network(pglib(system_name))`.
 - Equal to the number of **buses** → `plot_variable`.
 
-When `flat=true`, all variables use `plot_variable` and the network is not loaded.
+When `flat=true`, all variables use `plot_variable`.
+
 Output images are named `{system_name}_{variable}.png`.
 
+### Example `viz_opf` outputs with synthetic data
+<img src="exp/14_ieee_v.png" height="400">
+<img src="exp/14_ieee_pf.png" height="600">
