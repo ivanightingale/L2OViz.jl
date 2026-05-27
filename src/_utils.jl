@@ -11,9 +11,13 @@ plot_y(d::AbstractArray{<:Any, 3}, k::Int, frame_obs::Observable) = @lift d[k, :
 # Resolve `solver_names`: default to placeholder names if not supplied, otherwise validate length.
 resolve_solver_names(::Nothing, n_solvers::Int) = ["Solver $i" for i in 1:n_solvers]
 function resolve_solver_names(solver_names, n_solvers::Int)
-    length(solver_names) == n_solvers ||
-        throw(ArgumentError("solver_names must have length $n_solvers"))
-    return solver_names
+    if isa(solver_names, AbstractVector{<:AbstractString})
+        length(solver_names) == n_solvers || throw(ArgumentError(
+            "solver_names must have length $n_solvers, got $(length(solver_names))"))
+        return collect(solver_names)
+    else
+        throw(ArgumentError("solver_names must be a Vector of Strings or nothing"))
+    end
 end
 
 function validate_var_data_dims(var_data)
