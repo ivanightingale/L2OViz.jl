@@ -27,6 +27,7 @@ function plot_variable(x, var_data::Matrix...;
     length(var_data) >= 1 || throw(ArgumentError("At least one data matrix must be provided"))
     n_solvers = length(var_data)
     n_entries = size(var_data[1], 1)
+    n_entries >= 1 || throw(ArgumentError("var_data must have at least one entry (size(var_data[1], 1) > 0)"))
     # All matrices must have the same number of rows (dimension of the variable)
     for (i, d) in enumerate(var_data)
         size(d, 1) == n_entries || throw(DimensionMismatch("Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(n_entries)"))
@@ -37,7 +38,6 @@ function plot_variable(x, var_data::Matrix...;
         length(solver_names) == n_solvers || throw(ArgumentError("solver_names must have length $n_solvers"))
     end
 
-    # Resolve x into a per-solver vector of x-axis values
     if all(isa.(x, AbstractVector))
         # x is multiple vectors, one per solver
         x_vecs = collect(x)
@@ -46,13 +46,15 @@ function plot_variable(x, var_data::Matrix...;
             n_instances_i = size(var_data[i], 2)
             length(xi) == n_instances_i || throw(DimensionMismatch("Length of x[$(i)] ($(length(xi))) must equal number of columns in data matrix $(i) ($n_instances_i)"))
         end
-    else
+    elseif isa(x, AbstractVector)
         # x is a single vector shared across all solvers
         for (i, d) in enumerate(var_data)
             n_instances_i = size(d, 2)
             length(x) == n_instances_i || throw(DimensionMismatch("Length of x ($(length(x))) must equal number of columns in data matrix $(i) ($n_instances_i)"))
         end
         x_vecs = [x for _ in 1:n_solvers]
+    else
+        throw(ArgumentError("x must be either a single AbstractVector or multiple AbstractVectors (one per solver)"))
     end
     x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
 

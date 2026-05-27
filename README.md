@@ -19,6 +19,8 @@ contains the values of a 5-dimensional variable for 3 instances of an optimizati
 `plot_variable` accepts a variable number of `Matrix` inputs, each corresponding to a solver.
 
 ### Symmetric matrix variables
+Symmetric matrix variables can be visualized in a 2D layout of subplots which correspond to coordinates in the matrix.
+
 Symmetric matrix variable data should be provided in COO format.
 It is assumed that, across all the problem instances, the same matrix variable has the same dimensions and sparsity structure.
 The values are still stored as a `Matrix` with `n_instances` columns, where each column contains the nonzero values of the matrix variable in each problem instance.
@@ -28,6 +30,7 @@ Additionally, it is assumed that the COO coordinates contain only one of each sy
 
 `plot_matrix_variable` accepts a variable number of `Matrix` inputs, each corresponding to a solver.
 
+*Note: if the coordinate-based layout is not needed, you can also visualize the non-zero entries with `plot_variable` in a plain layout.*
 
 ## Visualization
 The values of each variable entry across all the problem instances are visualized in a scatter point subplot.
@@ -46,6 +49,9 @@ The animation can be exported as a GIF.
 ### Thresholding
 When the dimension of the variable to visualize is too high, `vis_threshold` limits the number of entries that are visualized.
 `significance_fn` is used to select the most interesting entries of the variable.
+
+By default, `significance_fn` chooses the solutions with the maximum absolute sum across all instances of all solvers.
+This can be used to, for example, visualize the variables where a solver produces highest error compared to a reference (by calling **the plotting functions on the error** instead of the solutions).
 
 
 ## Example: Optimal Power Flow

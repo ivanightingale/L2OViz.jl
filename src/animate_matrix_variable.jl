@@ -59,7 +59,7 @@ function animate_matrix_variable(I::Vector{Int}, J::Vector{Int}, x,
                                  vis_threshold::Int=20,
                                  significance_fn=default_significance,
                                  ylims::Union{Nothing,Tuple{Real,Real}}=nothing,
-                                 time_label::AbstractString="t")
+                                 time_label::String="t")
     if !isnothing(ylims)
         ylims[1] < ylims[2] || throw(ArgumentError(
             "ylims must satisfy ylims[1] < ylims[2], got $ylims"))
@@ -67,14 +67,15 @@ function animate_matrix_variable(I::Vector{Int}, J::Vector{Int}, x,
     length(var_data) >= 1 || throw(ArgumentError("At least one data array must be provided"))
     n_solvers = length(var_data)
     nnz = size(var_data[1], 1)
+    nnz >= 1 || throw(ArgumentError("var_data must have at least one entry (size(var_data[1], 1) > 0)"))
     n_frames = length(time_steps)
     n_frames >= 1 || throw(ArgumentError("time_steps must contain at least one frame"))
-
     length(I) == nnz || throw(DimensionMismatch("Length of I must equal number of rows in var_data"))
     length(J) == nnz || throw(DimensionMismatch("Length of J must equal number of rows in var_data"))
 
-    # All arrays must agree on nnz (rows); 3D arrays must additionally match the number of
-    # frames. Matrices have no time dimension and are constant across frames.
+    # All arrays must have the same number of rows (dimension of the variable)
+    # 3D arrays must match the number of frames.
+    # Matrices have no time dimension and are constant across frames.
     for (i, d) in enumerate(var_data)
         size(d, 1) == nnz || throw(DimensionMismatch(
             "Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(nnz)"))

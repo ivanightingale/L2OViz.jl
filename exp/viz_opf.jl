@@ -151,7 +151,7 @@ function animate_opf(
     system_name::String,
     variables::Union{String, Vector{String}},
     x,
-    time_steps::Vector,
+    time_steps::AbstractVector,
     var_data...;
     solver_names=nothing,
     output_dir::String=".",
@@ -168,7 +168,7 @@ function animate_opf(
     # We use runtime checks rather than a uniform type parameter because the array mode
     # legitimately mixes 2D and 3D shapes (animated solver vs. static reference).
     all_dict  = all(d -> d isa Dict, var_data)
-    all_array = all(d -> d isa Array, var_data)
+    all_array = all(d -> d isa AbstractArray, var_data)
     all_dict || all_array || throw(ArgumentError(
         "All var_data elements must be Dicts, or all must be arrays (Matrix or 3D array)"))
 
