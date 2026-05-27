@@ -3,6 +3,7 @@ module L2OViz
 using CairoMakie
 
 include("select_entries.jl")
+include("_utils.jl")
 include("plot_variable.jl")
 include("plot_matrix_variable.jl")
 include("animate_variable.jl")

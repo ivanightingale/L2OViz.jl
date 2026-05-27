@@ -65,53 +65,14 @@ function animate_matrix_variable(I::Vector{Int}, J::Vector{Int}, x,
             "ylims must satisfy ylims[1] < ylims[2], got $ylims"))
     end
     length(var_data) >= 1 || throw(ArgumentError("At least one data array must be provided"))
-    n_solvers = length(var_data)
-    nnz = size(var_data[1], 1)
-    nnz >= 1 || throw(ArgumentError("var_data must have at least one entry (size(var_data[1], 1) > 0)"))
     n_frames = length(time_steps)
     n_frames >= 1 || throw(ArgumentError("time_steps must contain at least one frame"))
+    nnz = validate_var_data_dims(var_data, n_frames)
     length(I) == nnz || throw(DimensionMismatch("Length of I must equal number of rows in var_data"))
     length(J) == nnz || throw(DimensionMismatch("Length of J must equal number of rows in var_data"))
-
-    # All arrays must have the same number of rows (dimension of the variable)
-    # 3D arrays must match the number of frames.
-    # Matrices have no time dimension and are constant across frames.
-    for (i, d) in enumerate(var_data)
-        size(d, 1) == nnz || throw(DimensionMismatch(
-            "Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(nnz)"))
-        if ndims(d) == 3
-            size(d, 3) == n_frames || throw(DimensionMismatch(
-                "Number of frames in data of solver $(i): $(size(d, 3)); does not equal length(time_steps) = $(n_frames)"))
-        end
-    end
-
-    if isnothing(solver_names)
-        solver_names = ["Solver $i" for i in 1:n_solvers]
-    else
-        length(solver_names) == n_solvers || throw(ArgumentError("solver_names must have length $n_solvers"))
-    end
-
-    if all(isa.(x, AbstractVector))
-        # x is multiple vectors, one per solver
-        x_vecs = collect(x)
-        length(x_vecs) == n_solvers || throw(ArgumentError(
-            "Number of x vectors ($(length(x_vecs))) must equal number of data arrays ($n_solvers)"))
-        for (i, xi) in enumerate(x_vecs)
-            n_instances_i = size(var_data[i], 2)
-            length(xi) == n_instances_i || throw(DimensionMismatch(
-                "Length of x[$(i)] ($(length(xi))) must equal number of columns in data array $(i) ($n_instances_i)"))
-        end
-    elseif isa(x, AbstractVector)
-        # x is a single vector shared across all solvers
-        for (i, d) in enumerate(var_data)
-            n_instances_i = size(d, 2)
-            length(x) == n_instances_i || throw(DimensionMismatch(
-                "Length of x ($(length(x))) must equal number of columns in data array $(i) ($n_instances_i)"))
-        end
-        x_vecs = [x for _ in 1:n_solvers]
-    else
-        throw(ArgumentError("x must be either a single AbstractVector or multiple AbstractVectors (one per solver)"))
-    end
+    x_vecs = resolve_x_vecs(x, var_data)
+    n_solvers = length(var_data)
+    solver_names = resolve_solver_names(solver_names, n_solvers)
     x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
 
     # Resolve full matrix dimension; symmetric matrix is square
@@ -120,31 +81,15 @@ function animate_matrix_variable(I::Vector{Int}, J::Vector{Int}, x,
     all(1 .<= I .<= effective_n_full) || throw(ArgumentError("All row indices must be in [1, n=$effective_n_full]"))
     all(1 .<= J .<= effective_n_full) || throw(ArgumentError("All column indices must be in [1, n=$effective_n_full]"))
 
-    # Per-coordinate, per-solver values for significance and ylims computations. For 3D arrays
-    # this collapses both instances and frames; for matrices it is just the row across instances.
-    entry_values(d, k) = ndims(d) == 3 ? vec(@view d[k, :, :]) : @view d[k, :]
-
-    # Significance score per coordinate: aggregate values across ALL instances and ALL frames
-    # of every solver, so that the chosen entries and the grid layout stay fixed across frames.
-    entry_scores = [significance_fn(vcat([Vector(entry_values(d, k)) for d in var_data]...))
-                    for k in 1:nnz]
+    # For each entry, combine values across all solvers, instances and frames for significance score
+    entry_scores = compute_entry_scores(var_data, nnz, significance_fn)
     I_plot, J_plot, nz_idx, sel_indices, filtered =
         select_matrix_entries(entry_scores, I, J, vis_threshold)
 
-    n_plot = length(I_plot)
+    n_grid_rows, n_grid_cols, grid_pos =
+        matrix_grid_layout(sel_indices, filtered, effective_n_full)
 
-    # Compressed grid when filtering; full n×n grid otherwise (same as plot_matrix_variable).
-    if filtered
-        index_map = Dict(c => idx for (idx, c) in enumerate(sel_indices))
-        n_grid_rows = n_grid_cols = length(sel_indices)
-        grid_pos = (i, j) -> (index_map[i], index_map[j])
-    else
-        n_grid_rows, n_grid_cols = effective_n_full, effective_n_full
-        grid_pos = (i, j) -> (i, j)
-    end
-
-    palette = Makie.wong_colors()
-    solver_colors = [palette[mod1(i, length(palette))] for i in 1:n_solvers]
+    solver_colors = solver_palette(n_solvers)
 
     # Extra vertical space at the top accommodates the time-step label.
     fig = Figure(size=(320 * n_grid_cols, 260 * n_grid_rows + 120))
@@ -160,52 +105,16 @@ function animate_matrix_variable(I::Vector{Int}, J::Vector{Int}, x,
     # Subplot grid lives in its own GridLayout so the matrix coordinates map cleanly.
     gl = fig[1, 1] = GridLayout(n_grid_rows, n_grid_cols)
 
-    legend_handles = []
-    axes = Axis[]
-
-    for k in 1:n_plot
-        entry_label = isempty(var_name) ? "[$(I_plot[k]),$(J_plot[k])]" :
-                                          "$(var_name)[$(I_plot[k]),$(J_plot[k])]"
-        gr, gc = grid_pos(I_plot[k], J_plot[k])
-        ax = Axis(gl[gr, gc]; title=entry_label, xlabel=x_label)
-        push!(axes, ax)
-
-        # Bind once per (entry, solver) iteration so the closure captures the right row index.
-        coo_row = nz_idx[k]
-        for (i, d) in enumerate(var_data)
-            # 3D data lifts on frame_obs so each frame shows that frame's slice; matrix data
-            # is plotted as a plain Vector and stays constant across frames.
-            y_plot = ndims(d) == 3 ? (@lift d[coo_row, :, $frame_obs]) : d[coo_row, :]
-            p = scatter!(ax, x_vecs[i], y_plot; color=solver_colors[i])
-            if k == 1
-                push!(legend_handles, p)
-            end
-        end
-    end
+    axes, legend_handles = draw_matrix_panels!(
+        gl, var_data, x_vecs, x_label, var_name,
+        I_plot, J_plot, nz_idx, grid_pos, solver_colors; frame_obs=frame_obs)
 
     linkxaxes!(axes...)
     linkyaxes!(axes...)
 
     # Fix a single global y-range for the entire animation. Because the y-axes are linked,
     # setting limits on one axis propagates to all panels.
-    if isnothing(ylims)
-        # Default: full min/max across selected COO entries / solvers / instances / frames.
-        ymin = Inf
-        ymax = -Inf
-        for k in 1:n_plot
-            for d in var_data
-                slice = entry_values(d, nz_idx[k])
-                ymin = min(ymin, minimum(slice))
-                ymax = max(ymax, maximum(slice))
-            end
-        end
-        span = ymax - ymin
-        pad = span > 0 ? 0.05 * span : 0.5 * max(abs(ymax), 1.0)
-        ylims!(axes[1], ymin - pad, ymax + pad)
-    else
-        # User-supplied limits used verbatim, no padding.
-        ylims!(axes[1], ylims[1], ylims[2])
-    end
+    apply_fixed_ylims!(axes[1], ylims, var_data, nz_idx)
 
     Legend(fig[2, 1], legend_handles, solver_names;
            orientation=:horizontal, tellwidth=false)

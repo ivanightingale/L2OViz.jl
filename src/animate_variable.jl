@@ -58,69 +58,21 @@ function animate_variable(x, time_steps::AbstractVector,
             "ylims must satisfy ylims[1] < ylims[2], got $ylims"))
     end
     length(var_data) >= 1 || throw(ArgumentError("At least one data array must be provided"))
-    n_solvers = length(var_data)
-    n_entries = size(var_data[1], 1)
-    n_entries >= 1 || throw(ArgumentError("var_data must have at least one entry (size(var_data[1], 1) > 0)"))
     n_frames = length(time_steps)
     n_frames >= 1 || throw(ArgumentError("time_steps must contain at least one frame"))
-
-    # All arrays must have the same number of rows (dimension of the variable)
-    # 3D arrays must match the number of frames.
-    # Matrices have no time dimension and are constant across frames.
-    for (i, d) in enumerate(var_data)
-        size(d, 1) == n_entries || throw(DimensionMismatch(
-            "Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(n_entries)"))
-        if ndims(d) == 3
-            size(d, 3) == n_frames || throw(DimensionMismatch(
-                "Number of frames in data of solver $(i): $(size(d, 3)); does not equal length(time_steps) = $(n_frames)"))
-        end
-    end
-
-    if isnothing(solver_names)
-        solver_names = ["Solver $i" for i in 1:n_solvers]
-    else
-        length(solver_names) == n_solvers || throw(ArgumentError("solver_names must have length $n_solvers"))
-    end
-
-    if all(isa.(x, AbstractVector))
-        # x is multiple vectors, one per solver
-        x_vecs = collect(x)
-        length(x_vecs) == n_solvers || throw(ArgumentError(
-            "Number of x vectors ($(length(x_vecs))) must equal number of data arrays ($n_solvers)"))
-        for (i, xi) in enumerate(x_vecs)
-            n_instances_i = size(var_data[i], 2)
-            length(xi) == n_instances_i || throw(DimensionMismatch(
-                "Length of x[$(i)] ($(length(xi))) must equal number of columns in data array $(i) ($n_instances_i)"))
-        end
-    elseif isa(x, AbstractVector)
-        # x is a single vector shared across all solvers
-        for (i, d) in enumerate(var_data)
-            n_instances_i = size(d, 2)
-            length(x) == n_instances_i || throw(DimensionMismatch(
-                "Length of x ($(length(x))) must equal number of columns in data array $(i) ($n_instances_i)"))
-        end
-        x_vecs = [x for _ in 1:n_solvers]
-    else
-        throw(ArgumentError("x must be either a single AbstractVector or multiple AbstractVectors (one per solver)"))
-    end
+    n_entries = validate_var_data_dims(var_data, n_frames)
+    x_vecs = resolve_x_vecs(x, var_data)
+    n_solvers = length(var_data)
+    solver_names = resolve_solver_names(solver_names, n_solvers)
     x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
 
-    # Per-entry, per-solver values for significance and ylims computations. For 3D arrays
-    # this collapses both instances and frames; for matrices it is just the row across instances.
-    entry_values(d, k) = ndims(d) == 3 ? vec(@view d[k, :, :]) : @view d[k, :]
-
-    # Significance score per entry: aggregate values over ALL instances and ALL frames
-    # across every solver, so that the chosen entries stay fixed throughout the animation.
-    scores = [significance_fn(vcat([Vector(entry_values(d, k)) for d in var_data]...))
-              for k in 1:n_entries]
-    selected_indices, _ = select_variable_entries(scores, vis_threshold)
+    # For each entry, combine values across all solvers, instances and frames for significance score
+    entry_scores = compute_entry_scores(var_data, n_entries, significance_fn)
+    selected_indices, _ = select_variable_entries(entry_scores, vis_threshold)
 
     n_plot = length(selected_indices)
-    n_cols = ceil(Int, sqrt(n_plot))
-    n_rows = ceil(Int, n_plot / n_cols)
-
-    palette = Makie.wong_colors()
-    solver_colors = [palette[mod1(i, length(palette))] for i in 1:n_solvers]
+    n_rows, n_cols = vector_grid_layout(n_plot)
+    solver_colors = solver_palette(n_solvers)
 
     # Extra vertical space at the top accommodates the time-step label.
     fig = Figure(size=(320 * n_cols, 260 * n_rows + 120))
@@ -133,51 +85,16 @@ function animate_variable(x, time_steps::AbstractVector,
           @lift(string(time_label, " = ", time_steps[$frame_obs]));
           fontsize=20, tellwidth=false, halign=:center)
 
-    legend_handles = []
-    axes = Axis[]
-
-    for (k, data_idx) in enumerate(selected_indices)
-        grid_row = div(k - 1, n_cols) + 1
-        grid_col = mod(k - 1, n_cols) + 1
-        entry_label = isempty(var_name) ? "[$data_idx]" : "$(var_name)[$data_idx]"
-        ax = Axis(fig[grid_row, grid_col]; title=entry_label, xlabel=x_label)
-        push!(axes, ax)
-
-        for (i, d) in enumerate(var_data)
-            # 3D data lifts on frame_obs so each frame shows that frame's slice; matrix data
-            # is plotted as a plain Vector and stays constant across frames.
-            y_plot = ndims(d) == 3 ? (@lift d[data_idx, :, $frame_obs]) : d[data_idx, :]
-            p = scatter!(ax, x_vecs[i], y_plot; color=solver_colors[i])
-            if k == 1
-                push!(legend_handles, p)
-            end
-        end
-    end
+    axes, legend_handles = draw_vector_panels!(
+        fig, var_data, x_vecs, x_label, var_name,
+        selected_indices, solver_colors, n_cols; frame_obs=frame_obs)
 
     linkxaxes!(axes...)
     linkyaxes!(axes...)
 
     # Fix a single global y-range for the entire animation. Because the y-axes are linked,
     # setting limits on one axis propagates to all panels.
-    if isnothing(ylims)
-        # Default: compute from full min/max across all selected entries / solvers /
-        # instances / frames.
-        ymin = Inf
-        ymax = -Inf
-        for data_idx in selected_indices
-            for d in var_data
-                slice = entry_values(d, data_idx)
-                ymin = min(ymin, minimum(slice))
-                ymax = max(ymax, maximum(slice))
-            end
-        end
-        span = ymax - ymin
-        pad = span > 0 ? 0.05 * span : 0.5 * max(abs(ymax), 1.0)
-        ylims!(axes[1], ymin - pad, ymax + pad)
-    else
-        # User-supplied limits used verbatim, no padding.
-        ylims!(axes[1], ylims[1], ylims[2])
-    end
+    apply_fixed_ylims!(axes[1], ylims, var_data, selected_indices)
 
     Legend(fig[n_rows + 1, 1:n_cols], legend_handles, solver_names;
            orientation=:horizontal, tellwidth=false)
