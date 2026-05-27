@@ -1,5 +1,6 @@
 """
-    animate_variable(x, time_steps, var_data::AbstractArray{<:Any,3}...;
+    animate_variable(x, time_steps,
+                     var_data::Union{AbstractMatrix, AbstractArray{<:Any,3}}...;
                      solver_names=nothing, xlabel=nothing,
                      var_name="", vis_threshold::Int=20,
                      significance_fn=default_significance,
@@ -16,9 +17,14 @@ Build an animatable figure for a vector variable across a sequence of time-stepp
 `time_steps` is a `Vector` of length `n_frames` giving the value displayed for each frame
 (e.g. the simulation time at each frame).
 
-`var_data` is one or more `(n_entries × n_instances × n_frames)` arrays, one per solver. All
-arrays must agree on `n_entries` and `n_frames`; `n_instances` may differ across solvers
-when a per-solver `x` is supplied.
+`var_data` is one or more arrays, one per solver. Each array may be either:
+- A 3D `(n_entries × n_instances × n_frames)` array, giving the variable's values at each frame.
+- A 2D `(n_entries × n_instances)` matrix, displayed as constant across every frame.
+
+Different solvers can mix the two shapes — useful for comparing an animated solver against a
+static reference solution. All arrays must agree on `n_entries`, and any 3D array must have
+`size(d, 3) == length(time_steps)`. `n_instances` may differ across solvers when a per-solver
+`x` is supplied.
 
 Significance-based entry selection (`vis_threshold`, `significance_fn`) is computed ONCE
 across all frames so that the grid layout and which entries are plotted stay stable
@@ -41,7 +47,7 @@ end
 ```
 """
 function animate_variable(x, time_steps::AbstractVector,
-                          var_data::AbstractArray{<:Any,3}...;
+                          var_data::Union{AbstractMatrix, AbstractArray{<:Any,3}}...;
                           solver_names=nothing, xlabel=nothing,
                           var_name="", vis_threshold::Int=20,
                           significance_fn=default_significance,
@@ -57,12 +63,15 @@ function animate_variable(x, time_steps::AbstractVector,
     n_frames = length(time_steps)
     n_frames >= 1 || throw(ArgumentError("time_steps must contain at least one frame"))
 
-    # All arrays must agree on the variable dimension (rows) and the number of frames.
+    # All arrays must agree on the variable dimension (rows); 3D arrays must additionally
+    # match the number of frames. Matrices have no time dimension and are constant across frames.
     for (i, d) in enumerate(var_data)
         size(d, 1) == n_entries || throw(DimensionMismatch(
             "Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(n_entries)"))
-        size(d, 3) == n_frames || throw(DimensionMismatch(
-            "Number of frames in data of solver $(i): $(size(d, 3)); does not equal length(time_steps) = $(n_frames)"))
+        if ndims(d) == 3
+            size(d, 3) == n_frames || throw(DimensionMismatch(
+                "Number of frames in data of solver $(i): $(size(d, 3)); does not equal length(time_steps) = $(n_frames)"))
+        end
     end
 
     if isnothing(solver_names)
@@ -92,9 +101,14 @@ function animate_variable(x, time_steps::AbstractVector,
     end
     x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
 
+    # Per-entry, per-solver values for significance and ylims computations. For 3D arrays
+    # this collapses both instances and frames; for matrices it is just the row across instances.
+    entry_values(d, k) = ndims(d) == 3 ? vec(@view d[k, :, :]) : @view d[k, :]
+
     # Significance score per entry: aggregate values over ALL instances and ALL frames
     # across every solver, so that the chosen entries stay fixed throughout the animation.
-    scores = [significance_fn(vcat([vec(d[k, :, :]) for d in var_data]...)) for k in 1:n_entries]
+    scores = [significance_fn(vcat([Vector(entry_values(d, k)) for d in var_data]...))
+              for k in 1:n_entries]
     selected_indices, _ = select_variable_entries(scores, vis_threshold)
 
     n_plot = length(selected_indices)
@@ -126,9 +140,10 @@ function animate_variable(x, time_steps::AbstractVector,
         push!(axes, ax)
 
         for (i, d) in enumerate(var_data)
-            # The y-values for this (entry, solver) at the current frame; lifts on frame_obs.
-            y_obs = @lift(d[data_idx, :, $frame_obs])
-            p = scatter!(ax, x_vecs[i], y_obs; color=solver_colors[i])
+            # 3D data lifts on frame_obs so each frame shows that frame's slice; matrix data
+            # is plotted as a plain Vector and stays constant across frames.
+            y_plot = ndims(d) == 3 ? (@lift d[data_idx, :, $frame_obs]) : d[data_idx, :]
+            p = scatter!(ax, x_vecs[i], y_plot; color=solver_colors[i])
             if k == 1
                 push!(legend_handles, p)
             end
@@ -147,7 +162,7 @@ function animate_variable(x, time_steps::AbstractVector,
         ymax = -Inf
         for data_idx in selected_indices
             for d in var_data
-                slice = @view d[data_idx, :, :]
+                slice = entry_values(d, data_idx)
                 ymin = min(ymin, minimum(slice))
                 ymax = max(ymax, maximum(slice))
             end

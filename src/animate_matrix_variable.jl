@@ -1,6 +1,6 @@
 """
     animate_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, time_steps,
-                            var_data::AbstractArray{<:Any,3}...;
+                            var_data::Union{AbstractMatrix, AbstractArray{<:Any,3}}...;
                             solver_names=nothing, n=nothing,
                             xlabel=nothing, var_name="",
                             vis_threshold::Int=20,
@@ -22,8 +22,13 @@ across all frames and solvers.
 
 `time_steps` is a `Vector` of length `n_frames` giving the value displayed for each frame.
 
-`var_data` is one or more `(nnz × n_instances × n_frames)` arrays, one per solver. All arrays
-must agree on `nnz` and `n_frames`; `n_instances` may differ across solvers when a per-solver
+`var_data` is one or more arrays, one per solver. Each array may be either:
+- A 3D `(nnz × n_instances × n_frames)` array, giving the variable's values at each frame.
+- A 2D `(nnz × n_instances)` matrix, displayed as constant across every frame.
+
+Different solvers can mix the two shapes — useful for comparing an animated solver against a
+static reference solution. All arrays must agree on `nnz`, and any 3D array must have
+`size(d, 3) == length(time_steps)`. `n_instances` may differ across solvers when a per-solver
 `x` is supplied.
 
 Thresholding (`vis_threshold`, `significance_fn`) follows the same induced-submatrix rule as
@@ -48,7 +53,7 @@ end
 """
 function animate_matrix_variable(I::Vector{Int}, J::Vector{Int}, x,
                                  time_steps::AbstractVector,
-                                 var_data::AbstractArray{<:Any,3}...;
+                                 var_data::Union{AbstractMatrix, AbstractArray{<:Any,3}}...;
                                  solver_names=nothing, n=nothing,
                                  xlabel=nothing, var_name="",
                                  vis_threshold::Int=20,
@@ -68,12 +73,15 @@ function animate_matrix_variable(I::Vector{Int}, J::Vector{Int}, x,
     length(I) == nnz || throw(DimensionMismatch("Length of I must equal number of rows in var_data"))
     length(J) == nnz || throw(DimensionMismatch("Length of J must equal number of rows in var_data"))
 
-    # All arrays must agree on nnz (rows) and number of frames (third dim).
+    # All arrays must agree on nnz (rows); 3D arrays must additionally match the number of
+    # frames. Matrices have no time dimension and are constant across frames.
     for (i, d) in enumerate(var_data)
         size(d, 1) == nnz || throw(DimensionMismatch(
             "Variable dimension of solver $(i): $(size(d, 1)); mismatches with variable dimension of solver 1: $(nnz)"))
-        size(d, 3) == n_frames || throw(DimensionMismatch(
-            "Number of frames in data of solver $(i): $(size(d, 3)); does not equal length(time_steps) = $(n_frames)"))
+        if ndims(d) == 3
+            size(d, 3) == n_frames || throw(DimensionMismatch(
+                "Number of frames in data of solver $(i): $(size(d, 3)); does not equal length(time_steps) = $(n_frames)"))
+        end
     end
 
     if isnothing(solver_names)
@@ -109,9 +117,14 @@ function animate_matrix_variable(I::Vector{Int}, J::Vector{Int}, x,
     all(1 .<= I .<= effective_n_full) || throw(ArgumentError("All row indices must be in [1, n=$effective_n_full]"))
     all(1 .<= J .<= effective_n_full) || throw(ArgumentError("All column indices must be in [1, n=$effective_n_full]"))
 
+    # Per-coordinate, per-solver values for significance and ylims computations. For 3D arrays
+    # this collapses both instances and frames; for matrices it is just the row across instances.
+    entry_values(d, k) = ndims(d) == 3 ? vec(@view d[k, :, :]) : @view d[k, :]
+
     # Significance score per coordinate: aggregate values across ALL instances and ALL frames
     # of every solver, so that the chosen entries and the grid layout stay fixed across frames.
-    entry_scores = [significance_fn(vcat([vec(d[k, :, :]) for d in var_data]...)) for k in 1:nnz]
+    entry_scores = [significance_fn(vcat([Vector(entry_values(d, k)) for d in var_data]...))
+                    for k in 1:nnz]
     I_plot, J_plot, nz_idx, sel_indices, filtered =
         select_matrix_entries(entry_scores, I, J, vis_threshold)
 
@@ -157,9 +170,10 @@ function animate_matrix_variable(I::Vector{Int}, J::Vector{Int}, x,
         # Bind once per (entry, solver) iteration so the closure captures the right row index.
         coo_row = nz_idx[k]
         for (i, d) in enumerate(var_data)
-            # y-values for this (coordinate, solver) at the current frame; lifts on frame_obs.
-            y_obs = @lift(d[coo_row, :, $frame_obs])
-            p = scatter!(ax, x_vecs[i], y_obs; color=solver_colors[i])
+            # 3D data lifts on frame_obs so each frame shows that frame's slice; matrix data
+            # is plotted as a plain Vector and stays constant across frames.
+            y_plot = ndims(d) == 3 ? (@lift d[coo_row, :, $frame_obs]) : d[coo_row, :]
+            p = scatter!(ax, x_vecs[i], y_plot; color=solver_colors[i])
             if k == 1
                 push!(legend_handles, p)
             end
@@ -177,7 +191,7 @@ function animate_matrix_variable(I::Vector{Int}, J::Vector{Int}, x,
         ymax = -Inf
         for k in 1:n_plot
             for d in var_data
-                slice = @view d[nz_idx[k], :, :]
+                slice = entry_values(d, nz_idx[k])
                 ymin = min(ymin, minimum(slice))
                 ymax = max(ymax, maximum(slice))
             end
