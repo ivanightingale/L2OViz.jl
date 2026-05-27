@@ -19,6 +19,8 @@ contains the values of a 5-dimensional variable for 3 instances of an optimizati
 `plot_variable` accepts a variable number of `Matrix` inputs, each corresponding to a solver.
 
 ### Symmetric matrix variables
+Symmetric matrix variables can be visualized in a 2D layout of subplots which correspond to coordinates in the matrix.
+
 Symmetric matrix variable data should be provided in COO format.
 It is assumed that, across all the problem instances, the same matrix variable has the same dimensions and sparsity structure.
 The values are still stored as a `Matrix` with `n_instances` columns, where each column contains the nonzero values of the matrix variable in each problem instance.
@@ -28,6 +30,7 @@ Additionally, it is assumed that the COO coordinates contain only one of each sy
 
 `plot_matrix_variable` accepts a variable number of `Matrix` inputs, each corresponding to a solver.
 
+*Note: if the coordinate-based layout is not needed, you can also visualize the non-zero entries with `plot_variable` in a plain layout.*
 
 ## Visualization
 The values of each variable entry across all the problem instances are visualized in a scatter point subplot.
@@ -37,31 +40,45 @@ The values of each variable entry across all the problem instances are visualize
 The data of Solver A and Solver B do not have to be for the same problem instances.
 In this case, different `x` should be provided.
 
+### Animation
+`animate_variable` and `animate_matrix_variable` are animated counterparts to `plot_variable` and `plot_matrix_variable`.
+Each frame uses the same subplot layout as its non-animated counterpart.
+The animation can be exported as a GIF.
+
 
 ### Thresholding
 When the dimension of the variable to visualize is too high, `vis_threshold` limits the number of entries that are visualized.
 `significance_fn` is used to select the most interesting entries of the variable.
 
+By default, `significance_fn` chooses the solutions with the maximum absolute sum across all instances of all solvers.
+This can be used to, for example, visualize the variables where a solver produces highest error compared to a reference (by calling **the plotting functions on the error** instead of the solutions).
+
 
 ## Example: Optimal Power Flow
-`exp/viz_opf.jl` defines `viz_opf`, a utility function for visualizing OPF solution data
-using system topology from PGLib.jl and PowerModels.jl.
+`exp/viz_opf.jl` defines `viz_opf` and `animate_opf`, utility functions for visualizing OPF solution data using system topology from PGLib.jl and PowerModels.jl.
 
 `viz_opf` supports two calling modes:
 
 - **Single variable** (`variables::String`, `var_data::Matrix...`): each `var_data` argument is
   one solver's `(n_dim × n_instances)` matrix for the named variable.
 - **Multiple variables** (`variables::Vector{String}`, `var_data::Dict...`): each `var_data`
-  argument is a `Dict` mapping variable names to matrices, one per solver.
+  argument is a `Dict` mapping variable names to matrices, one per solver. Multiple images will
+  be saved.
+
+`animate_opf` supports two similar calling modes (single- and multiple-variable). Refer to `animate_variable` and `animate_matrix_variable` for the corresponding data formats.
 
 By default (`flat=false`), the plot type is inferred from each variable's dimension:
-- Equal to the number of **branches** → `plot_matrix_variable`, with COO indices from `f_bus`/`t_bus` in sorted branch key order obtained from `make_basic_network(pglib(system_name))`.
-- Equal to the number of **buses** → `plot_variable`.
+- Equal to the number of **branches** → `plot_matrix_variable`/`animate_matrix_variable`, with COO indices from `f_bus`/`t_bus` in sorted branch key order obtained from `make_basic_network(pglib(system_name))`.
+- Equal to the number of **buses** → `plot_variable`/`animate_variable`.
 
-When `flat=true`, all variables use `plot_variable`.
+When `flat=true`, all variables use `plot_variable`/`animate_variable`.
 
-Output images are named `{system_name}_{variable}.png`.
+Output images are named `{system_name}_{variable}.png`/`{system_name}_{variable}.gif`.
 
 ### Example `viz_opf` outputs with synthetic data
 <img src="exp/14_ieee_v.png" height="400">
 <img src="exp/14_ieee_pf.png" height="600">
+
+### Example `animate_opf` outputs with synthetic data
+<img src="exp/14_ieee_v.gif" height="400">
+<img src="exp/14_ieee_pf.gif" height="600">

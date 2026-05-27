@@ -38,6 +38,7 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matri
     length(var_data) >= 1 || throw(ArgumentError("At least one data matrix must be provided"))
     n_solvers = length(var_data)
     nnz = size(var_data[1], 1)
+    nnz >= 1 || throw(ArgumentError("var_data must have at least one entry (size(var_data[1], 1) > 0)"))
     length(I) == nnz || throw(DimensionMismatch("Length of I must equal number of rows in var_data"))
     length(J) == nnz || throw(DimensionMismatch("Length of J must equal number of rows in var_data"))
     # All matrices must have the same number of rows (nnz of the variable)
@@ -50,7 +51,6 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matri
         length(solver_names) == n_solvers || throw(ArgumentError("solver_names must have length $n_solvers"))
     end
 
-    # Resolve x into a per-solver vector of x-axis values
     if all(isa.(x, AbstractVector))
         # x is multiple vectors, one per solver
         x_vecs = collect(x)
@@ -59,13 +59,15 @@ function plot_matrix_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matri
             n_instances_i = size(var_data[i], 2)
             length(xi) == n_instances_i || throw(DimensionMismatch("Length of x[$(i)] ($(length(xi))) must equal number of columns in data matrix $(i) ($n_instances_i)"))
         end
-    else
+    elseif isa(x, AbstractVector)
         # x is a single vector shared across all solvers
         for (i, d) in enumerate(var_data)
             n_instances_i = size(d, 2)
             length(x) == n_instances_i || throw(DimensionMismatch("Length of x ($(length(x))) must equal number of columns in data matrix $(i) ($n_instances_i)"))
         end
         x_vecs = [x for _ in 1:n_solvers]
+    else
+        throw(ArgumentError("x must be either a single AbstractVector or multiple AbstractVectors (one per solver)"))
     end
     x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
 
