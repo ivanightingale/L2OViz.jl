@@ -90,7 +90,7 @@ function animate_variable(x, time_steps::AbstractVector,
             length(xi) == n_instances_i || throw(DimensionMismatch(
                 "Length of x[$(i)] ($(length(xi))) must equal number of columns in data array $(i) ($n_instances_i)"))
         end
-    else
+    elseif isa(x, AbstractVector)
         # x is a single vector shared across all solvers
         for (i, d) in enumerate(var_data)
             n_instances_i = size(d, 2)
@@ -98,6 +98,8 @@ function animate_variable(x, time_steps::AbstractVector,
                 "Length of x ($(length(x))) must equal number of columns in data array $(i) ($n_instances_i)"))
         end
         x_vecs = [x for _ in 1:n_solvers]
+    else
+        throw(ArgumentError("x must be either a single AbstractVector or multiple AbstractVectors (one per solver)"))
     end
     x_label = isnothing(xlabel) ? "Unknown Parameter" : xlabel
 
