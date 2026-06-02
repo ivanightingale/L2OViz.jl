@@ -68,7 +68,7 @@ function animate_variable(x, time_steps::AbstractVector,
 
     # For each entry, combine values across all solvers, instances and frames for significance score
     entry_scores = compute_entry_scores(var_data, n_entries, significance_fn)
-    selected_indices, _ = select_variable_entries(entry_scores, vis_threshold)
+    selected_indices = select_variable_entries(entry_scores, vis_threshold)
 
     n_plot = length(selected_indices)
     n_rows, n_cols = vector_grid_layout(n_plot)

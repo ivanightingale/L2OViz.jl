@@ -119,7 +119,7 @@ function apply_fixed_ylims!(ax, ylims_user, var_data, entry_indices)
     end
 end
 
-# Panel titles. Vector variant produces "[k]" or "var_name[k]"; matrix variant produces
+# Panel titles. Vector variant produces "[k]" or "var_name[k]"; graph variant produces
 # "[i,j]" or "var_name[i,j]".
 entry_label(var_name::AbstractString, idx::Int) =
     isempty(var_name) ? "[$idx]" : "$(var_name)[$idx]"
@@ -133,17 +133,13 @@ function vector_grid_layout(n_plot::Int)
     return n_rows, n_cols
 end
 
-# Matrix layout: when entries were filtered, compress to a length(sel_indices) ×
-# length(sel_indices) submatrix; otherwise keep the full effective_n_full × effective_n_full
-# grid. `grid_pos(i, j)` maps original (i, j) → grid cell.
-function matrix_grid_layout(sel_indices, filtered::Bool, effective_n_full::Int)
-    if filtered
-        index_map = Dict(c => idx for (idx, c) in enumerate(sel_indices))
-        n = length(sel_indices)
-        return n, n, (i, j) -> (index_map[i], index_map[j])
-    else
-        return effective_n_full, effective_n_full, (i, j) -> (i, j)
-    end
+# Compute dimension of the plot grid and the mapping (i, j) → grid cell.
+function matrix_grid_layout(I_plot, J_plot)
+    # (i, j) should be sorted in the resulting grid
+    V_subgraph_sorted = sort(union(unique(I_plot), unique(J_plot)))
+    index_map = Dict(c => idx for (idx, c) in enumerate(V_subgraph_sorted))
+    n = length(V_subgraph_sorted)
+    return n, (i, j) -> (index_map[i], index_map[j])
 end
 
 # Draw the vector-variable panel grid into `parent` (a Figure or GridLayout). Returns
@@ -169,11 +165,11 @@ function draw_vector_panels!(parent, var_data, x_vecs, x_label, var_name,
     return axes, legend_handles
 end
 
-# Same as `draw_vector_panels!`, but for a COO-symmetric matrix variable. `grid_pos` maps
-# the original (I, J) coordinates to (row, col) cells of `gl` (a GridLayout). `nz_idx`
-# maps the k-th plotted entry back to its row in each solver's data array.
+# Same as `draw_vector_panels!`, but for a graph variable. `grid_pos` maps the original (I, J)
+# to (row, col) cells of `gl` (a GridLayout). `selected_indices` maps the k-th plotted entry
+# back to its row in each solver's data array.
 function draw_matrix_panels!(gl, var_data, x_vecs, x_label, var_name,
-                             I_plot, J_plot, nz_idx, grid_pos,
+                             I_plot, J_plot, selected_indices, grid_pos,
                              solver_colors; frame_obs=nothing)
     legend_handles = []
     axes = Axis[]
@@ -182,7 +178,7 @@ function draw_matrix_panels!(gl, var_data, x_vecs, x_label, var_name,
         ax = Axis(gl[gr, gc];
                   title=entry_label(var_name, I_plot[k], J_plot[k]), xlabel=x_label)
         push!(axes, ax)
-        coo_row = nz_idx[k]
+        coo_row = selected_indices[k]
         for (i, d) in enumerate(var_data)
             p = scatter!(ax, x_vecs[i], plot_y(d, coo_row, frame_obs);
                          color=solver_colors[i])

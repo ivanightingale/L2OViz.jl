@@ -6,7 +6,7 @@ using L2OViz
 using PGLib
 using PowerModels
 
-# Load branch COO indices and bus/branch counts from a PGLib system.
+# Load from-bus/to-bus indices and bus/branch counts from a PGLib system.
 function _get_power_system_data(system_name::String)
     network = make_basic_network(pglib(system_name))
     branch_dict = network["branch"]
@@ -33,8 +33,8 @@ Two calling modes, determined by `T`:
 `x` is either a single `Vector` (shared across solvers) or a `Vector` of `Vector`s (one per solver).
 
 **Variable dispatch** (when `flat=false`):
-- Dimension equals the number of **branches** → `plot_matrix_variable`, with COO indices from
-  `f_bus`/`t_bus` in sorted branch key order.
+- Dimension equals the number of **branches** → `plot_graph_variable`, with `f_bus`/`t_bus` indices in
+  sorted branch key order.
 - Dimension equals the number of **buses** → `plot_variable`.
 
 **Keyword arguments**: `solver_names`, `output_dir` (default `"."`), `vis_threshold` (default `20`),
@@ -85,7 +85,7 @@ function viz_opf(
                                 vis_threshold=vis_threshold,
                                 xlabel=xlabel)
         elseif n_dim == n_branches
-            fig = plot_matrix_variable(I_branches, J_branches, x, solvers_data...;
+            fig = plot_graph_variable(I_branches, J_branches, x, solvers_data...;
                                        solver_names=solver_names,
                                        var_name=var_name,
                                        vis_threshold=vis_threshold,
@@ -102,7 +102,7 @@ function viz_opf(
         # Add a figure-level title above the subplot grid. Row 0 places the
         # label above row 1 (where the subplots/inner layout start). We set
         # `tellwidth=false` so the label's natural text width does not feed
-        # back into column sizing — important for `plot_matrix_variable`,
+        # back into column sizing — important for `plot_graph_variable`,
         # whose contents live inside a nested GridLayout at `fig[1, 1]`.
         Label(fig[0, :], "$(system_name): $(var_name)";
               fontsize=20, font=:bold, halign=:center,
@@ -130,7 +130,7 @@ Two calling modes, determined by the element type of `var_data`:
 
 Within either mode, different solvers may supply different shapes for the same variable
 (e.g. an animated solver alongside a static reference) — see
-[`animate_variable`](@ref) / [`animate_matrix_variable`](@ref).
+[`animate_variable`](@ref) / [`animate_graph_variable`](@ref).
 
 `x` is either a single `Vector` (shared across solvers) or a `Vector` of `Vector`s
 (one per solver), following the same convention as [`viz_opf`](@ref).
@@ -138,8 +138,8 @@ Within either mode, different solvers may supply different shapes for the same v
 `time_steps` is a `Vector` whose length must match the third dimension of any 3D `var_data`.
 
 **Variable dispatch** (when `flat=false`):
-- Dimension equals the number of **branches** → [`animate_matrix_variable`](@ref),
-  using COO indices derived from `f_bus`/`t_bus` in sorted branch key order.
+- Dimension equals the number of **branches** → [`animate_graph_variable`](@ref),
+  with `f_bus`/`t_bus` indices in sorted branch key order.
 - Dimension equals the number of **buses** → [`animate_variable`](@ref).
 
 **Keyword arguments**: `solver_names`, `output_dir` (default `"."`), `vis_threshold`
@@ -212,7 +212,7 @@ function animate_opf(
                                               time_label=time_label,
                                               ylims=ylims)
         elseif n_dim == n_branches
-            fig, frame_obs = animate_matrix_variable(I_branches, J_branches, x, time_steps,
+            fig, frame_obs = animate_graph_variable(I_branches, J_branches, x, time_steps,
                                                      solvers_data...;
                                                      solver_names=solver_names,
                                                      var_name=var_name,
@@ -233,7 +233,7 @@ function animate_opf(
         end
 
         # Add a figure-level title above the time-step label (which already lives at
-        # row 0 inside animate_variable / animate_matrix_variable). Negative row index
+        # row 0 inside animate_variable / animate_graph_variable). Negative row index
         # prepends a new row above the existing layout.
         Label(fig[-1, :], "$(system_name): $(var_name)";
               fontsize=20, font=:bold, halign=:center,
