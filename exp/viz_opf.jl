@@ -6,9 +6,8 @@ using L2OViz
 using PGLib
 using PowerModels
 
-# Load from-bus/to-bus indices and bus/branch counts from a PGLib system.
-function _get_power_system_data(system_name::String)
-    network = make_basic_network(pglib(system_name))
+# Load from-bus/to-bus indices and bus/branch counts from a PowerModels network dict.
+function _get_power_system_data(network::Dict)
     branch_dict = network["branch"]
     sorted_branch_keys = sort(collect(keys(branch_dict)), by=k -> parse(Int, string(k)))
     I_branches = [branch_dict[k]["f_bus"] for k in sorted_branch_keys]
@@ -19,9 +18,14 @@ function _get_power_system_data(system_name::String)
 end
 
 """
-    viz_opf(system_name, variables, x, var_data::T...; kwargs...) where {T <: Union{Matrix, Dict}}
+    viz_opf(network::Dict, variables, x, var_data::T...; kwargs...) where {T <: Union{Matrix, Dict}}
+    viz_opf(system_identifier::String, variables, x, var_data...; kwargs...)
 
 Visualize OPF solution variables and save one image per variable to `output_dir`.
+
+Provide either a network data `Dict` similar to PowerModels format, or the name of the
+system compatible with PGLib.jl, for which data is obtained with
+`make_basic_network(pglib(system_identifier))`.
 
 Two calling modes, determined by `T`:
 
@@ -37,16 +41,17 @@ Two calling modes, determined by `T`:
   sorted branch key order.
 - Dimension equals the number of **buses** → `plot_variable`.
 
-**Keyword arguments**: `solver_names`, `output_dir` (default `"."`), `vis_threshold` (default `20`),
-`flat` (default `false`, bypasses network loading and always uses `plot_variable`),
-`xlabel` (forwarded to the underlying plotting functions; defaults to their default).
+**Keyword arguments**: `system_name`, `solver_names`, `output_dir` (default `"."`),
+`vis_threshold` (default `20`), `flat` (default `false`, bypasses network loading and always uses
+`plot_variable`), `xlabel` (forwarded to the underlying plotting functions; defaults to their default).
 Output images are named `{system_name}_{variable}.png`.
 """
 function viz_opf(
-    system_name::String,
+    network::Dict,
     variables::Union{String, Vector{String}},
     x,
     var_data::T...;
+    system_name::String=get(network, "name", "system"),
     solver_names=nothing,
     output_dir::String=".",
     vis_threshold::Int=20,
@@ -54,7 +59,7 @@ function viz_opf(
     xlabel=nothing
 ) where {T <: Union{Matrix, Dict}}
     if !flat
-        I_branches, J_branches, n_branches, n_buses = _get_power_system_data(system_name)
+        I_branches, J_branches, n_branches, n_buses = _get_power_system_data(network)
     end
 
     if T <: Matrix
@@ -114,11 +119,33 @@ function viz_opf(
     end
 end
 
+function viz_opf(
+    system_identifier::String,
+    variables::Union{String, Vector{String}},
+    x,
+    var_data::T...;
+    system_name::String=system_identifier,
+    flat::Bool=false,
+    kwargs...
+) where {T <: Union{Matrix, Dict}}
+    if flat
+        network = Dict()
+    else
+        network = make_basic_network(pglib(system_identifier))
+    end
+    return viz_opf(network, variables, x, var_data...; system_name=system_name, flat=flat, kwargs...)
+end
+
 """
-    animate_opf(system_name, variables, x, time_steps, var_data...; kwargs...)
+    animate_opf(network::Dict, variables, x, time_steps, var_data...; kwargs...)
+    animate_opf(system_identifier::String, variables, x, time_steps, var_data...; kwargs...)
 
 Animate OPF solution variables over a sequence of time-stepped frames and save one
 GIF per variable to `output_dir`. Animated analogue of [`viz_opf`](@ref).
+
+Provide either a network data `Dict` similar to PowerModels format, or the name of the
+system compatible with PGLib.jl, for which data is obtained with
+`make_basic_network(pglib(system_identifier))`.
 
 Two calling modes, determined by the element type of `var_data`:
 
@@ -142,17 +169,18 @@ Within either mode, different solvers may supply different shapes for the same v
   with `f_bus`/`t_bus` indices in sorted branch key order.
 - Dimension equals the number of **buses** → [`animate_variable`](@ref).
 
-**Keyword arguments**: `solver_names`, `output_dir` (default `"."`), `vis_threshold`
-(default `20`), `flat` (default `false`, bypasses network loading and always uses
+**Keyword arguments**: `system_name`, `solver_names`, `output_dir` (default `"."`),
+`vis_threshold` (default `20`), `flat` (default `false`, bypasses network loading and always uses
 `animate_variable`), `xlabel`, `time_label` (default `"t"`), `framerate` (default `10`),
 `ylims` (default `nothing`). Output files are named `{system_name}_{variable}.gif`.
 """
 function animate_opf(
-    system_name::String,
+    network::Dict,
     variables::Union{String, Vector{String}},
     x,
     time_steps::AbstractVector,
     var_data...;
+    system_name::String=get(network, "name", "system"),
     solver_names=nothing,
     output_dir::String=".",
     vis_threshold::Int=20,
@@ -173,7 +201,7 @@ function animate_opf(
         "All var_data elements must be Dicts, or all must be arrays (Matrix or 3D array)"))
 
     if !flat
-        I_branches, J_branches, n_branches, n_buses = _get_power_system_data(system_name)
+        I_branches, J_branches, n_branches, n_buses = _get_power_system_data(network)
     end
 
     if all_array
@@ -245,4 +273,22 @@ function animate_opf(
         end
         println("Saved $output_path")
     end
+end
+
+function animate_opf(
+    system_identifier::String,
+    variables::Union{String, Vector{String}},
+    x,
+    time_steps::AbstractVector,
+    var_data...;
+    system_name::String=system_identifier,
+    flat::Bool=false,
+    kwargs...
+)
+    if flat
+        network = Dict()
+    else
+        network = make_basic_network(pglib(system_identifier))
+    end
+    return animate_opf(network, variables, x, time_steps, var_data...; system_name=system_name, flat=flat, kwargs...)
 end
