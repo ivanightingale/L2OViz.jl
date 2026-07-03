@@ -77,8 +77,11 @@ This can be used to, for example, visualize the variables where a solver produce
 `animate_opf` supports two similar calling modes (single- and multiple-variable). Refer to `animate_variable` and `animate_graph_variable` for the corresponding data formats.
 
 By default (`flat=false`), the plot type is inferred from each variable's dimension:
-- Equal to the number of **branches** → `plot_graph_variable`/`animate_graph_variable`, with `I`/`J` being `f_bus`/`t_bus` **in sorted branch key order** obtained from `make_basic_network(pglib(system_name))`.
+- Equal to the number of **branches** → `plot_graph_variable`/`animate_graph_variable`, with `I`/`J` being `f_bus`/`t_bus` in **sorted branch key order** obtained from `make_basic_network(pglib(system_name))`.
+- Equal to the number of **bus pairs** → `plot_graph_variable`/`animate_graph_variable`, with `I`/`J` being `f_bus`/`t_bus` in the order of their first occurences in the list of branches.
 - Equal to the number of **buses** → `plot_variable`/`animate_variable`.
+
+All the branches are assumed to be active and are accounted for.
 
 When `flat=true`, all variables use `plot_variable`/`animate_variable`.
 
