@@ -1,6 +1,7 @@
 """
     plot_variable(x, var_data::Matrix...; solver_names=nothing, xlabel=nothing,
-                  var_name="", vis_threshold::Int=20, significance_fn=default_significance) -> Figure
+                  var_name="", vis_threshold::Int=20, significance_fn=default_significance,
+                  symlog::Bool=false) -> Figure
 
 Visualize a vector variable across multiple problem instances.
 
@@ -20,11 +21,14 @@ The x-axis label defaults to `"Unknown Parameter"` unless `xlabel` is given.
 Only the top-`vis_threshold` most significant entries are visualized. `significance_fn`
 (default: 1-norm) is applied to the values of each entry of the variable across all solvers and
 instances to get the score of each entry. Entry labels always reflect the original indices.
+
+Set `symlog=true` to draw the y-axis on a symmetric log scale.
 """
 function plot_variable(x, var_data::Matrix...;
                        solver_names=nothing, xlabel=nothing,
                        var_name="", vis_threshold::Int=20,
-                       significance_fn=default_significance)
+                       significance_fn=default_significance,
+                       symlog::Bool=false)
     length(var_data) >= 1 || throw(ArgumentError("At least one data matrix must be provided"))
     n_entries = validate_var_data_dims(var_data)
     x_vecs = resolve_x_vecs(x, var_data)
@@ -41,9 +45,11 @@ function plot_variable(x, var_data::Matrix...;
     solver_colors = solver_palette(n_solvers)
     fig = Figure(size=(320 * n_cols, 260 * n_rows + 60))
 
+    yscale = resolve_yscale(symlog, var_data, selected_indices)
+
     axes, legend_handles = draw_vector_panels!(
         fig, var_data, x_vecs, x_label, var_name,
-        selected_indices, solver_colors, n_cols)
+        selected_indices, solver_colors, n_cols; yscale=yscale)
 
     linkxaxes!(axes...)
     linkyaxes!(axes...)

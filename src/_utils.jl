@@ -71,7 +71,7 @@ function resolve_x_vecs(x, var_data)
         end
         return [x for _ in 1:n_solvers]
     else
-        throw(ArgumentError("x must be either a single AbstractVector or multiple AbstractVectors (one per solver)"))
+        throw(ArgumentError("x must be either a single AbstractVector or multiple AbstractVectors (one per solver); got $(typeof(x))"))
     end
 end
 
@@ -90,10 +90,8 @@ function compute_entry_scores(var_data, n_entries::Int, significance_fn)
             for k in 1:n_entries]
 end
 
-# Auto y-axis limits with 5% padding, computed across the given entries of every solver's
-# data. Used by animate_* to fix a single y-range across all frames so that the animation
-# does not auto-rescale frame-by-frame.
-function compute_ylim_range(var_data, entry_indices)
+# Min/max over the given entries of every solver's data (and over all frames for 3D data).
+function data_extrema(var_data, entry_indices)
     ymin = Inf
     ymax = -Inf
     for k in entry_indices
@@ -103,20 +101,66 @@ function compute_ylim_range(var_data, entry_indices)
             ymax = max(ymax, maximum(slice))
         end
     end
-    span = ymax - ymin
-    pad = span > 0 ? 0.05 * span : 0.5 * max(abs(ymax), 1.0)
-    return ymin - pad, ymax + pad
+    return ymin, ymax
+end
+
+# Auto y-axis limits with 5% padding, computed across the given entries of every solver's
+# data. Used by animate_* to fix a single y-range across all frames so that the animation
+# does not auto-rescale frame-by-frame.
+# The padding is applied in the axis' transformed space, so that a nonlinear `yscale` gets
+# visually even margins.
+function compute_ylim_range(var_data, entry_indices, yscale)
+    ymin, ymax = data_extrema(var_data, entry_indices)
+    lo, hi = yscale(ymin), yscale(ymax)
+    span = hi - lo
+    pad = span > 0 ? 0.05 * span : 0.5 * max(abs(hi), 1.0)
+    inverse = Makie.inverse_transform(yscale)
+    return inverse(lo - pad), inverse(hi + pad)
 end
 
 # Apply user-supplied ylims, or compute & apply auto ylims with padding.
 # Since the axes are linked, setting limits on one axis propagates to every panel.
-function apply_fixed_ylims!(ax, ylims_user, var_data, entry_indices)
+function apply_fixed_ylims!(ax, ylims_user, var_data, entry_indices, yscale)
     if isnothing(ylims_user)
-        lo, hi = compute_ylim_range(var_data, entry_indices)
+        lo, hi = compute_ylim_range(var_data, entry_indices, yscale)
         ylims!(ax, lo, hi)
     else
         ylims!(ax, ylims_user[1], ylims_user[2])
     end
+end
+
+# Largest number of decades a symlog axis is allowed to span on each side of zero. Bounds the
+# linear region from below so that a single near-zero value cannot stretch the axis out.
+const SYMLOG_MAX_DECADES = 8
+
+# Half-width of the linear region of a symlog y-axis, derived from the data: the smallest
+# nonzero magnitude present, floored at `SYMLOG_MAX_DECADES` below the largest magnitude.
+# Returns `nothing` when every value is zero, where a symlog axis is not meaningful.
+function symlog_linthresh(var_data, entry_indices)
+    max_abs = 0.0
+    min_nonzero_abs = Inf
+    for k in entry_indices
+        for d in var_data
+            for value in entry_values(d, k)
+                magnitude = abs(value)
+                magnitude == 0 && continue
+                max_abs = max(max_abs, magnitude)
+                min_nonzero_abs = min(min_nonzero_abs, magnitude)
+            end
+        end
+    end
+    max_abs > 0 || return nothing
+    return clamp(min_nonzero_abs, max_abs / 10.0^SYMLOG_MAX_DECADES, max_abs)
+end
+
+function resolve_yscale(symlog::Bool, var_data, entry_indices)
+    symlog || return identity
+    linthresh = symlog_linthresh(var_data, entry_indices)
+    if isnothing(linthresh)
+        @warn "symlog=true, but every displayed value is zero; falling back to a linear y-axis."
+        return identity
+    end
+    return Makie.Symlog10(linthresh)
 end
 
 # Panel titles. Vector variant produces "[k]" or "var_name[k]"; graph variant produces
@@ -147,14 +191,15 @@ end
 # for animations; this is what selects between a plain Vector and a lifted Observable in
 # `plot_y` for each 3D solver array.
 function draw_vector_panels!(parent, var_data, x_vecs, x_label, var_name,
-                             selected_indices, solver_colors, n_cols; frame_obs=nothing)
+                             selected_indices, solver_colors, n_cols; frame_obs=nothing,
+                             yscale=identity)
     legend_handles = []
     axes = Axis[]
     for (k, data_idx) in enumerate(selected_indices)
         grid_row = div(k - 1, n_cols) + 1
         grid_col = mod(k - 1, n_cols) + 1
         ax = Axis(parent[grid_row, grid_col];
-                  title=entry_label(var_name, data_idx), xlabel=x_label)
+                  title=entry_label(var_name, data_idx), xlabel=x_label, yscale=yscale)
         push!(axes, ax)
         for (i, d) in enumerate(var_data)
             p = scatter!(ax, x_vecs[i], plot_y(d, data_idx, frame_obs);
@@ -170,13 +215,14 @@ end
 # back to its row in each solver's data array.
 function draw_matrix_panels!(gl, var_data, x_vecs, x_label, var_name,
                              I_plot, J_plot, selected_indices, grid_pos,
-                             solver_colors; frame_obs=nothing)
+                             solver_colors; frame_obs=nothing, yscale=identity)
     legend_handles = []
     axes = Axis[]
     for k in eachindex(I_plot)
         gr, gc = grid_pos(I_plot[k], J_plot[k])
         ax = Axis(gl[gr, gc];
-                  title=entry_label(var_name, I_plot[k], J_plot[k]), xlabel=x_label)
+                  title=entry_label(var_name, I_plot[k], J_plot[k]), xlabel=x_label,
+                  yscale=yscale)
         push!(axes, ax)
         coo_row = selected_indices[k]
         for (i, d) in enumerate(var_data)

@@ -4,7 +4,7 @@
                      solver_names=nothing, xlabel=nothing,
                      var_name="", vis_threshold::Int=20,
                      significance_fn=default_significance,
-                     ylims=nothing,
+                     ylims=nothing, symlog::Bool=false,
                      time_label="t")
         -> (fig::Figure, frame_obs::Observable{Int})
 
@@ -36,6 +36,8 @@ entries, solvers, instances and frames. Pass `ylims=(ymin, ymax)` to override wi
 limits — useful e.g. when early-iteration solver state contains outliers that would otherwise
 dominate the range and make the rest of the animation unreadable.
 
+Set `symlog=true` to draw the y-axis on a symmetric log scale.
+
 The returned `frame_obs::Observable{Int}` controls which frame is currently displayed.
 To export a GIF, drive it via Makie's `record`:
 
@@ -52,6 +54,7 @@ function animate_variable(x, time_steps::AbstractVector,
                           var_name="", vis_threshold::Int=20,
                           significance_fn=default_significance,
                           ylims::Union{Nothing,Tuple{Real,Real}}=nothing,
+                          symlog::Bool=false,
                           time_label::String="t")
     if !isnothing(ylims)
         ylims[1] < ylims[2] || throw(ArgumentError(
@@ -85,16 +88,18 @@ function animate_variable(x, time_steps::AbstractVector,
           @lift(string(time_label, " = ", time_steps[$frame_obs]));
           fontsize=20, tellwidth=false, halign=:center)
 
+    yscale = resolve_yscale(symlog, var_data, selected_indices)
+
     axes, legend_handles = draw_vector_panels!(
         fig, var_data, x_vecs, x_label, var_name,
-        selected_indices, solver_colors, n_cols; frame_obs=frame_obs)
+        selected_indices, solver_colors, n_cols; frame_obs=frame_obs, yscale=yscale)
 
     linkxaxes!(axes...)
     linkyaxes!(axes...)
 
     # Fix a single global y-range for the entire animation. Because the y-axes are linked,
     # setting limits on one axis propagates to all panels.
-    apply_fixed_ylims!(axes[1], ylims, var_data, selected_indices)
+    apply_fixed_ylims!(axes[1], ylims, var_data, selected_indices, yscale)
 
     Legend(fig[n_rows + 1, 1:n_cols], legend_handles, solver_names;
            orientation=:horizontal, tellwidth=false)

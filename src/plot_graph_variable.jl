@@ -2,7 +2,8 @@
     plot_graph_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matrix...;
                          solver_names=nothing,
                          xlabel=nothing, var_name="",
-                         vis_threshold::Int=20, significance_fn=default_significance) -> Figure
+                         vis_threshold::Int=20, significance_fn=default_significance,
+                         symlog::Bool=false) -> Figure
 
 Visualize a graph variable across multiple problem instances.
 The variable is assumed to have the same graph topology across all the problem instances.
@@ -27,12 +28,15 @@ to the values of the k-th entry of the variable across all solvers and instances
 score of coordinate `(I[k], J[k])`, and the score of each column/row is the max entry score in
 that column/row. If multiple edges between `(i, j)` are selected, only the highest-scoring one is
 kept.
+
+Set `symlog=true` to draw the y-axis on a symmetric log scale.
 """
 function plot_graph_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matrix...;
                               solver_names=nothing,
                               xlabel=nothing, var_name="",
                               vis_threshold::Int=20,
-                              significance_fn=default_significance)
+                              significance_fn=default_significance,
+                              symlog::Bool=false)
     length(var_data) >= 1 || throw(ArgumentError("At least one data matrix must be provided"))
     n_e = validate_var_data_dims(var_data)
     length(I) == n_e || throw(DimensionMismatch("Length of I must equal number of rows in var_data"))
@@ -53,9 +57,11 @@ function plot_graph_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matrix
     fig = Figure(size=(320 * n, 260 * n + 60))
     gl = fig[1, 1] = GridLayout(n, n)
 
+    yscale = resolve_yscale(symlog, var_data, selected_indices)
+
     axes, legend_handles = draw_matrix_panels!(
         gl, var_data, x_vecs, x_label, var_name,
-        I_plot, J_plot, selected_indices, grid_pos, solver_colors)
+        I_plot, J_plot, selected_indices, grid_pos, solver_colors; yscale=yscale)
 
     linkxaxes!(axes...)
     linkyaxes!(axes...)

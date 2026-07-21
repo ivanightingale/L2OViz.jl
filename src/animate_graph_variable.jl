@@ -5,7 +5,7 @@
                             xlabel=nothing, var_name="",
                             vis_threshold::Int=20,
                             significance_fn=default_significance,
-                            ylims=nothing,
+                            ylims=nothing, symlog::Bool=false,
                             time_label="t")
         -> (fig::Figure, frame_obs::Observable{Int})
 
@@ -40,6 +40,8 @@ The y-axis range is held fixed for every frame. By default the limits are comput
 the full min/max of the displayed data across all selected entries, solvers, instances and
 frames. Pass `ylims=(ymin, ymax)` to override with explicit limits.
 
+Set `symlog=true` to draw the y-axis on a symmetric log scale.
+
 The returned `frame_obs::Observable{Int}` controls which frame is currently displayed. To
 export a GIF, drive it via Makie's `record`:
 
@@ -58,6 +60,7 @@ function animate_graph_variable(I::Vector{Int}, J::Vector{Int}, x,
                                  vis_threshold::Int=20,
                                  significance_fn=default_significance,
                                  ylims::Union{Nothing,Tuple{Real,Real}}=nothing,
+                                 symlog::Bool=false,
                                  time_label::String="t")
     if !isnothing(ylims)
         ylims[1] < ylims[2] || throw(ArgumentError(
@@ -96,16 +99,19 @@ function animate_graph_variable(I::Vector{Int}, J::Vector{Int}, x,
     # Subplot grid lives in its own GridLayout so the matrix coordinates map cleanly.
     gl = fig[1, 1] = GridLayout(n, n)
 
+    yscale = resolve_yscale(symlog, var_data, selected_indices)
+
     axes, legend_handles = draw_matrix_panels!(
         gl, var_data, x_vecs, x_label, var_name,
-        I_plot, J_plot, selected_indices, grid_pos, solver_colors; frame_obs=frame_obs)
+        I_plot, J_plot, selected_indices, grid_pos, solver_colors; frame_obs=frame_obs,
+        yscale=yscale)
 
     linkxaxes!(axes...)
     linkyaxes!(axes...)
 
     # Fix a single global y-range for the entire animation. Because the y-axes are linked,
     # setting limits on one axis propagates to all panels.
-    apply_fixed_ylims!(axes[1], ylims, var_data, selected_indices)
+    apply_fixed_ylims!(axes[1], ylims, var_data, selected_indices, yscale)
 
     Legend(fig[2, 1], legend_handles, solver_names;
            orientation=:horizontal, tellwidth=false)

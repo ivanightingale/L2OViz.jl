@@ -59,7 +59,8 @@ All the branches are assumed to be active and are accounted for.
 **Keyword arguments**: `system_name` (label used in figure titles and output filenames; defaults to the
 network's `"name"` field, or `"system"` if absent), `solver_names`, `output_dir` (default `"."`),
 `vis_threshold` (default `20`), `flat` (default `false`, bypasses network loading and always uses
-`plot_variable`), `xlabel` (forwarded to the underlying plotting functions; defaults to their default).
+`plot_variable`), `xlabel` (forwarded to the underlying plotting functions; defaults to their default),
+`symlog` (default `false`, draws the y-axis on a symmetric log scale).
 Output images are named `{system_name}_{variable}.png`.
 """
 function viz_opf(
@@ -72,7 +73,8 @@ function viz_opf(
     output_dir::String=".",
     vis_threshold::Int=20,
     flat::Bool=false,
-    xlabel=nothing
+    xlabel=nothing,
+    symlog::Bool=false
 ) where {T <: Union{Matrix, Dict}}
     if !flat
         I_branches, J_branches, n_branches, n_buses,
@@ -105,26 +107,30 @@ function viz_opf(
                                 solver_names=solver_names,
                                 var_name=var_name,
                                 vis_threshold=vis_threshold,
-                                xlabel=xlabel)
+                                xlabel=xlabel,
+                                symlog=symlog)
         elseif n_dim == n_branches
             fig = plot_graph_variable(I_branches, J_branches, x, solvers_data...;
                                        solver_names=solver_names,
                                        var_name=var_name,
                                        vis_threshold=vis_threshold,
-                                       xlabel=xlabel)
+                                       xlabel=xlabel,
+                                       symlog=symlog)
         elseif n_dim == n_buspairs
             fig = plot_graph_variable(I_buspairs, J_buspairs, x, solvers_data...;
                                        solver_names=solver_names,
                                        var_name=var_name,
                                        vis_threshold=vis_threshold,
-                                       xlabel=xlabel)
+                                       xlabel=xlabel,
+                                       symlog=symlog)
         else
             n_dim == n_buses || throw(ArgumentError("Variable '$var_name' has dimension $n_dim, expected $n_branches (branches), $n_buspairs (bus pairs) or $n_buses (buses)"))
             fig = plot_variable(x, solvers_data...;
                                 solver_names=solver_names,
                                 var_name=var_name,
                                 vis_threshold=vis_threshold,
-                                xlabel=xlabel)
+                                xlabel=xlabel,
+                                symlog=symlog)
         end
 
         # Add a figure-level title above the subplot grid. Row 0 places the
@@ -201,7 +207,8 @@ All the branches are assumed to be active and are accounted for.
 network's `"name"` field, or `"system"` if absent), `solver_names`, `output_dir` (default `"."`),
 `vis_threshold` (default `20`), `flat` (default `false`, bypasses network loading and always uses
 `animate_variable`), `xlabel`, `time_label` (default `"t"`), `framerate` (default `10`),
-`ylims` (default `nothing`). Output files are named `{system_name}_{variable}.gif`.
+`ylims` (default `nothing`), `symlog` (default `false`, draws the y-axis on a symmetric log
+scale). Output files are named `{system_name}_{variable}.gif`.
 """
 function animate_opf(
     network::Dict,
@@ -218,6 +225,7 @@ function animate_opf(
     time_label::String="t",
     framerate::Int=10,
     ylims::Union{Nothing,Tuple{Real,Real}}=nothing,
+    symlog::Bool=false,
 )
     length(var_data) >= 1 || throw(ArgumentError("At least one var_data element is required"))
 
@@ -268,7 +276,8 @@ function animate_opf(
                                               vis_threshold=vis_threshold,
                                               xlabel=xlabel,
                                               time_label=time_label,
-                                              ylims=ylims)
+                                              ylims=ylims,
+                                              symlog=symlog)
         elseif n_dim == n_branches
             fig, frame_obs = animate_graph_variable(I_branches, J_branches, x, time_steps,
                                                      solvers_data...;
@@ -277,7 +286,8 @@ function animate_opf(
                                                      vis_threshold=vis_threshold,
                                                      xlabel=xlabel,
                                                      time_label=time_label,
-                                                     ylims=ylims)
+                                                     ylims=ylims,
+                                                     symlog=symlog)
         elseif n_dim == n_buspairs
             fig, frame_obs = animate_graph_variable(I_buspairs, J_buspairs, x, time_steps,
                                                      solvers_data...;
@@ -286,7 +296,8 @@ function animate_opf(
                                                      vis_threshold=vis_threshold,
                                                      xlabel=xlabel,
                                                      time_label=time_label,
-                                                     ylims=ylims)
+                                                     ylims=ylims,
+                                                     symlog=symlog)
         else
             n_dim == n_buses || throw(ArgumentError(
                 "Variable '$var_name' has dimension $n_dim, expected $n_branches (branches), $n_buspairs (bus pairs) or $n_buses (buses)"))
@@ -296,7 +307,8 @@ function animate_opf(
                                               vis_threshold=vis_threshold,
                                               xlabel=xlabel,
                                               time_label=time_label,
-                                              ylims=ylims)
+                                              ylims=ylims,
+                                              symlog=symlog)
         end
 
         # Add a figure-level title above the time-step label (which already lives at
