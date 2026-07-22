@@ -3,7 +3,7 @@
                          solver_names=nothing,
                          xlabel=nothing, var_name="",
                          vis_threshold::Int=20, significance_fn=default_significance,
-                         symlog::Bool=false) -> Figure
+                         symlog::Bool=false, palette=nothing, alpha=1.0) -> Figure
 
 Visualize a graph variable across multiple problem instances.
 The variable is assumed to have the same graph topology across all the problem instances.
@@ -30,13 +30,19 @@ that column/row. If multiple edges between `(i, j)` are selected, only the highe
 kept.
 
 Set `symlog=true` to draw the y-axis on a symmetric log scale.
+
+`palette` sets the per-solver colors; it defaults to `Makie.wong_colors()`. It may be a vector
+of colors (of any type Makie accepts, e.g. `[:red, :blue]`), which is cycled through when there
+are more solvers than colors, or a `Symbol` naming a Makie/ColorSchemes palette (e.g. `:tab10`,
+`:viridis`): categorical palettes use their discrete colors, and continuous colormaps are sampled
+into as many evenly spaced colors as there are solvers.
 """
 function plot_graph_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matrix...;
                               solver_names=nothing,
                               xlabel=nothing, var_name="",
                               vis_threshold::Int=20,
                               significance_fn=default_significance,
-                              symlog::Bool=false)
+                              symlog::Bool=false, palette=nothing, alpha::Real=1.0)
     length(var_data) >= 1 || throw(ArgumentError("At least one data matrix must be provided"))
     n_e = validate_var_data_dims(var_data)
     length(I) == n_e || throw(DimensionMismatch("Length of I must equal number of rows in var_data"))
@@ -52,7 +58,7 @@ function plot_graph_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matrix
 
     n, grid_pos = matrix_grid_layout(I_plot, J_plot)
 
-    solver_colors = solver_palette(n_solvers)
+    solver_colors = solver_palette(n_solvers, palette)
 
     fig = Figure(size=(320 * n, 260 * n + 60))
     gl = fig[1, 1] = GridLayout(n, n)
@@ -61,7 +67,7 @@ function plot_graph_variable(I::Vector{Int}, J::Vector{Int}, x, var_data::Matrix
 
     axes, legend_handles = draw_matrix_panels!(
         gl, var_data, x_vecs, x_label, var_name,
-        I_plot, J_plot, selected_indices, grid_pos, solver_colors; yscale=yscale)
+        I_plot, J_plot, selected_indices, grid_pos, solver_colors; yscale=yscale, alpha=alpha)
 
     linkxaxes!(axes...)
     linkyaxes!(axes...)

@@ -6,7 +6,7 @@
                             vis_threshold::Int=20,
                             significance_fn=default_significance,
                             ylims=nothing, symlog::Bool=false,
-                            time_label="t")
+                            time_label="t", palette=nothing, alpha=1.0)
         -> (fig::Figure, frame_obs::Observable{Int})
 
 Build an animation for a graph variable across a sequence of time-stepped frames.
@@ -42,6 +42,12 @@ frames. Pass `ylims=(ymin, ymax)` to override with explicit limits.
 
 Set `symlog=true` to draw the y-axis on a symmetric log scale.
 
+`palette` sets the per-solver colors; it defaults to `Makie.wong_colors()`. It may be a vector
+of colors (of any type Makie accepts, e.g. `[:red, :blue]`), which is cycled through when there
+are more solvers than colors, or a `Symbol` naming a Makie/ColorSchemes palette (e.g. `:tab10`,
+`:viridis`): categorical palettes use their discrete colors, and continuous colormaps are sampled
+into as many evenly spaced colors as there are solvers.
+
 The returned `frame_obs::Observable{Int}` controls which frame is currently displayed. To
 export a GIF, drive it via Makie's `record`:
 
@@ -61,7 +67,7 @@ function animate_graph_variable(I::Vector{Int}, J::Vector{Int}, x,
                                  significance_fn=default_significance,
                                  ylims::Union{Nothing,Tuple{Real,Real}}=nothing,
                                  symlog::Bool=false,
-                                 time_label::String="t")
+                                 time_label::String="t", palette=nothing, alpha::Real=1.0)
     if !isnothing(ylims)
         ylims[1] < ylims[2] || throw(ArgumentError(
             "ylims must satisfy ylims[1] < ylims[2], got $ylims"))
@@ -83,7 +89,7 @@ function animate_graph_variable(I::Vector{Int}, J::Vector{Int}, x,
 
     n, grid_pos = matrix_grid_layout(I_plot, J_plot)
 
-    solver_colors = solver_palette(n_solvers)
+    solver_colors = solver_palette(n_solvers, palette)
 
     # Extra vertical space at the top accommodates the time-step label.
     fig = Figure(size=(320 * n, 260 * n + 120))
@@ -104,7 +110,7 @@ function animate_graph_variable(I::Vector{Int}, J::Vector{Int}, x,
     axes, legend_handles = draw_matrix_panels!(
         gl, var_data, x_vecs, x_label, var_name,
         I_plot, J_plot, selected_indices, grid_pos, solver_colors; frame_obs=frame_obs,
-        yscale=yscale)
+        yscale=yscale, alpha=alpha)
 
     linkxaxes!(axes...)
     linkyaxes!(axes...)

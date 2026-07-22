@@ -1,7 +1,7 @@
 """
     plot_variable(x, var_data::Matrix...; solver_names=nothing, xlabel=nothing,
                   var_name="", vis_threshold::Int=20, significance_fn=default_significance,
-                  symlog::Bool=false) -> Figure
+                  symlog::Bool=false, palette=nothing, alpha=1.0) -> Figure
 
 Visualize a vector variable across multiple problem instances.
 
@@ -23,12 +23,18 @@ Only the top-`vis_threshold` most significant entries are visualized. `significa
 instances to get the score of each entry. Entry labels always reflect the original indices.
 
 Set `symlog=true` to draw the y-axis on a symmetric log scale.
+
+`palette` sets the per-solver colors; it defaults to `Makie.wong_colors()`. It may be a vector
+of colors (of any type Makie accepts, e.g. `[:red, :blue]`), which is cycled through when there
+are more solvers than colors, or a `Symbol` naming a Makie/ColorSchemes palette (e.g. `:tab10`,
+`:viridis`): categorical palettes use their discrete colors, and continuous colormaps are sampled
+into as many evenly spaced colors as there are solvers.
 """
 function plot_variable(x, var_data::Matrix...;
                        solver_names=nothing, xlabel=nothing,
                        var_name="", vis_threshold::Int=20,
                        significance_fn=default_significance,
-                       symlog::Bool=false)
+                       symlog::Bool=false, palette=nothing, alpha::Real=1.0)
     length(var_data) >= 1 || throw(ArgumentError("At least one data matrix must be provided"))
     n_entries = validate_var_data_dims(var_data)
     x_vecs = resolve_x_vecs(x, var_data)
@@ -42,14 +48,14 @@ function plot_variable(x, var_data::Matrix...;
 
     n_plot = length(selected_indices)
     n_rows, n_cols = vector_grid_layout(n_plot)
-    solver_colors = solver_palette(n_solvers)
+    solver_colors = solver_palette(n_solvers, palette)
     fig = Figure(size=(320 * n_cols, 260 * n_rows + 60))
 
     yscale = resolve_yscale(symlog, var_data, selected_indices)
 
     axes, legend_handles = draw_vector_panels!(
         fig, var_data, x_vecs, x_label, var_name,
-        selected_indices, solver_colors, n_cols; yscale=yscale)
+        selected_indices, solver_colors, n_cols; yscale=yscale, alpha=alpha)
 
     linkxaxes!(axes...)
     linkyaxes!(axes...)

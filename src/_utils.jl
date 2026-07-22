@@ -75,11 +75,32 @@ function resolve_x_vecs(x, var_data)
     end
 end
 
-# Per-solver scatter color, cycling through Makie.wong_colors() if there are more solvers
-# than palette entries.
-function solver_palette(n_solvers::Int)
-    palette = Makie.wong_colors()
-    return [palette[mod1(i, length(palette))] for i in 1:n_solvers]
+# Per-solver scatter color, cycling through `palette` if there are more solvers than palette
+# entries. `palette` may be:
+# - `nothing`: Makie's default categorical palette (wong_colors).
+# - a `Symbol`: the name of a Makie/ColorSchemes palette (e.g. `:tab10`, `:viridis`).
+# - a vector of colors (anything Makie accepts, e.g. `[:red, :blue]`).
+function solver_palette(n_solvers::Int, palette=nothing)
+    colors = resolve_palette_colors(palette, n_solvers)
+    isempty(colors) && throw(ArgumentError("palette must contain at least one color"))
+    return [colors[mod1(i, length(colors))] for i in 1:n_solvers]
+end
+
+resolve_palette_colors(::Nothing, ::Int) = Makie.wong_colors()
+resolve_palette_colors(palette, ::Int) = palette
+
+# Resolve a named palette into a vector of colors. `categorical_colors` samples continuous
+# colormaps (e.g. `:viridis`) into `n_solvers` evenly spaced colors so distinct solvers stay
+# visually separated, and returns categorical schemes' (e.g. `:tab10`) discrete swatches. It
+# errors only when a categorical scheme has fewer swatches than `n_solvers`, in which case we
+# fall back to the full swatch set for `solver_palette` to cycle through.
+function resolve_palette_colors(palette::Symbol, n_solvers::Int)
+    try
+        return Makie.categorical_colors(palette, n_solvers)
+    catch err
+        err isa ErrorException || rethrow()
+        return Makie.to_colormap(palette)
+    end
 end
 
 # Per-row significance score for the variable: aggregate every solver's values at row `k`
@@ -192,7 +213,7 @@ end
 # `plot_y` for each 3D solver array.
 function draw_vector_panels!(parent, var_data, x_vecs, x_label, var_name,
                              selected_indices, solver_colors, n_cols; frame_obs=nothing,
-                             yscale=identity)
+                             yscale=identity, alpha=1.0)
     legend_handles = []
     axes = Axis[]
     for (k, data_idx) in enumerate(selected_indices)
@@ -203,7 +224,7 @@ function draw_vector_panels!(parent, var_data, x_vecs, x_label, var_name,
         push!(axes, ax)
         for (i, d) in enumerate(var_data)
             p = scatter!(ax, x_vecs[i], plot_y(d, data_idx, frame_obs);
-                         color=solver_colors[i])
+                         color=solver_colors[i], alpha=alpha)
             k == 1 && push!(legend_handles, p)
         end
     end
@@ -215,7 +236,7 @@ end
 # back to its row in each solver's data array.
 function draw_matrix_panels!(gl, var_data, x_vecs, x_label, var_name,
                              I_plot, J_plot, selected_indices, grid_pos,
-                             solver_colors; frame_obs=nothing, yscale=identity)
+                             solver_colors; frame_obs=nothing, yscale=identity, alpha=1.0)
     legend_handles = []
     axes = Axis[]
     for k in eachindex(I_plot)
@@ -227,7 +248,7 @@ function draw_matrix_panels!(gl, var_data, x_vecs, x_label, var_name,
         coo_row = selected_indices[k]
         for (i, d) in enumerate(var_data)
             p = scatter!(ax, x_vecs[i], plot_y(d, coo_row, frame_obs);
-                         color=solver_colors[i])
+                         color=solver_colors[i], alpha=alpha)
             k == 1 && push!(legend_handles, p)
         end
     end

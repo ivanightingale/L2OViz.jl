@@ -60,7 +60,9 @@ All the branches are assumed to be active and are accounted for.
 network's `"name"` field, or `"system"` if absent), `solver_names`, `output_dir` (default `"."`),
 `vis_threshold` (default `20`), `flat` (default `false`, bypasses network loading and always uses
 `plot_variable`), `xlabel` (forwarded to the underlying plotting functions; defaults to their default),
-`symlog` (default `false`, draws the y-axis on a symmetric log scale).
+`symlog` (default `false`, draws the y-axis on a symmetric log scale),
+`palette` (default `nothing`, sets the per-solver colors — a vector of colors or a `Symbol`
+naming a Makie/ColorSchemes palette).
 Output images are named `{system_name}_{variable}.png`.
 """
 function viz_opf(
@@ -74,7 +76,9 @@ function viz_opf(
     vis_threshold::Int=20,
     flat::Bool=false,
     xlabel=nothing,
-    symlog::Bool=false
+    symlog::Bool=false,
+    palette=nothing,
+    alpha::Real=1.0
 ) where {T <: Union{Matrix, Dict}}
     if !flat
         I_branches, J_branches, n_branches, n_buses,
@@ -108,21 +112,27 @@ function viz_opf(
                                 var_name=var_name,
                                 vis_threshold=vis_threshold,
                                 xlabel=xlabel,
-                                symlog=symlog)
+                                symlog=symlog,
+                                palette=palette,
+                                alpha=alpha)
         elseif n_dim == n_branches
             fig = plot_graph_variable(I_branches, J_branches, x, solvers_data...;
                                        solver_names=solver_names,
                                        var_name=var_name,
                                        vis_threshold=vis_threshold,
                                        xlabel=xlabel,
-                                       symlog=symlog)
+                                       symlog=symlog,
+                                       palette=palette,
+                                       alpha=alpha)
         elseif n_dim == n_buspairs
             fig = plot_graph_variable(I_buspairs, J_buspairs, x, solvers_data...;
                                        solver_names=solver_names,
                                        var_name=var_name,
                                        vis_threshold=vis_threshold,
                                        xlabel=xlabel,
-                                       symlog=symlog)
+                                       symlog=symlog,
+                                       palette=palette,
+                                       alpha=alpha)
         else
             n_dim == n_buses || throw(ArgumentError("Variable '$var_name' has dimension $n_dim, expected $n_branches (branches), $n_buspairs (bus pairs) or $n_buses (buses)"))
             fig = plot_variable(x, solvers_data...;
@@ -130,7 +140,9 @@ function viz_opf(
                                 var_name=var_name,
                                 vis_threshold=vis_threshold,
                                 xlabel=xlabel,
-                                symlog=symlog)
+                                symlog=symlog,
+                                palette=palette,
+                                alpha=alpha)
         end
 
         # Add a figure-level title above the subplot grid. Row 0 places the
@@ -208,7 +220,9 @@ network's `"name"` field, or `"system"` if absent), `solver_names`, `output_dir`
 `vis_threshold` (default `20`), `flat` (default `false`, bypasses network loading and always uses
 `animate_variable`), `xlabel`, `time_label` (default `"t"`), `framerate` (default `10`),
 `ylims` (default `nothing`), `symlog` (default `false`, draws the y-axis on a symmetric log
-scale). Output files are named `{system_name}_{variable}.gif`.
+scale), `palette` (default `nothing`, sets the per-solver colors — a vector of colors or a `Symbol`
+naming a Makie/ColorSchemes palette).
+Output files are named `{system_name}_{variable}.gif`.
 """
 function animate_opf(
     network::Dict,
@@ -226,6 +240,8 @@ function animate_opf(
     framerate::Int=10,
     ylims::Union{Nothing,Tuple{Real,Real}}=nothing,
     symlog::Bool=false,
+    palette=nothing,
+    alpha::Real=1.0,
 )
     length(var_data) >= 1 || throw(ArgumentError("At least one var_data element is required"))
 
@@ -277,7 +293,9 @@ function animate_opf(
                                               xlabel=xlabel,
                                               time_label=time_label,
                                               ylims=ylims,
-                                              symlog=symlog)
+                                              symlog=symlog,
+                                              palette=palette,
+                                              alpha=alpha)
         elseif n_dim == n_branches
             fig, frame_obs = animate_graph_variable(I_branches, J_branches, x, time_steps,
                                                      solvers_data...;
@@ -287,7 +305,9 @@ function animate_opf(
                                                      xlabel=xlabel,
                                                      time_label=time_label,
                                                      ylims=ylims,
-                                                     symlog=symlog)
+                                                     symlog=symlog,
+                                                     palette=palette,
+                                                     alpha=alpha)
         elseif n_dim == n_buspairs
             fig, frame_obs = animate_graph_variable(I_buspairs, J_buspairs, x, time_steps,
                                                      solvers_data...;
@@ -297,7 +317,9 @@ function animate_opf(
                                                      xlabel=xlabel,
                                                      time_label=time_label,
                                                      ylims=ylims,
-                                                     symlog=symlog)
+                                                     symlog=symlog,
+                                                     palette=palette,
+                                                     alpha=alpha)
         else
             n_dim == n_buses || throw(ArgumentError(
                 "Variable '$var_name' has dimension $n_dim, expected $n_branches (branches), $n_buspairs (bus pairs) or $n_buses (buses)"))
@@ -308,7 +330,9 @@ function animate_opf(
                                               xlabel=xlabel,
                                               time_label=time_label,
                                               ylims=ylims,
-                                              symlog=symlog)
+                                              symlog=symlog,
+                                              palette=palette,
+                                              alpha=alpha)
         end
 
         # Add a figure-level title above the time-step label (which already lives at
